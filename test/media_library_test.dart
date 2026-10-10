@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:duanju_app/local_store.dart';
+import 'package:duanju_app/core_bridge.dart';
 import 'package:duanju_app/media_library.dart';
 import 'package:duanju_app/media_pipeline.dart';
 import 'package:duanju_app/models.dart';
@@ -148,7 +149,8 @@ void main() {
         fixtureProbe(rate: 48000),
       ]);
       expect(audioOnly.videoTranscodes, 0);
-      expect(audioOnly.audioTranscodes, 1);
+      expect(audioOnly.audioTranscodes, 3);
+      expect(audioOnly.canonicalAac, isTrue);
       final identical = MergePlan.create([fixtureProbe(), fixtureProbe()]);
       expect(identical.videoTranscodes, 0);
       expect(identical.audioTranscodes, 0);
@@ -163,7 +165,8 @@ void main() {
     ]);
     expect(plan.audio, isNotNull);
     expect(plan.videoTranscodes, 0);
-    expect(plan.audioTranscodes, 2);
+    expect(plan.audioTranscodes, 3);
+    expect(plan.canonicalAac, isTrue);
   });
 
   test(
@@ -233,7 +236,10 @@ void main() {
         await expectLater(
           library.merge(jobs),
           throwsA(
-            predicate((Object error) => error.toString().contains('已取消')),
+            predicate(
+              (Object error) =>
+                  error is AppFailure && error.toString().contains('已停止'),
+            ),
           ),
         );
         expect(executor.commands, isEmpty);

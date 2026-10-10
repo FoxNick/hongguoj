@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:duanju_app/app_bottom_navigation.dart';
+import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/app_theme.dart';
 import 'package:duanju_app/home_screen.dart';
 import 'package:duanju_app/local_store.dart';
@@ -19,6 +20,11 @@ import 'player_fixtures.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(mockPlayerDevice);
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(AppDevice.channel, null);
+  });
 
   Future<LocalStore> localStore() async {
     SharedPreferences.setMockInitialValues({});
@@ -106,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('bottom-nav-1')));
     await tester.pumpAndSettle();
-    expect(find.text('我的追剧'), findsOneWidget);
+    expect(find.text('我的追剧 · 0'), findsOneWidget);
     await tester.tap(find.byTooltip('更多'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('设置与备份'));
@@ -130,7 +136,7 @@ void main() {
     );
     await tester.tap(find.byType(BackButton).last);
     await tester.pumpAndSettle();
-    expect(find.text('我的追剧'), findsOneWidget);
+    expect(find.text('我的追剧 · 0'), findsOneWidget);
     expect(
       tester
           .widget<AppBottomNavigation>(find.byType(AppBottomNavigation))
@@ -152,7 +158,7 @@ void main() {
       Brightness.light,
     );
     expect(repository.requests.length, requests);
-    expect(find.text('我的追剧'), findsOneWidget);
+    expect(find.text('我的追剧 · 0'), findsOneWidget);
     tester.platformDispatcher.clearPlatformBrightnessTestValue();
     await tester.pumpWidget(const SizedBox.shrink());
     store.dispose();
@@ -226,7 +232,7 @@ void main() {
   }
 
   testWidgets(
-    'player shell follows light theme while video controls stay dark',
+    'portrait player retains light app theme with dark video and panel',
     (tester) async {
       phone(tester);
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -265,14 +271,22 @@ void main() {
       );
       expect(
         SystemChrome.latestStyle?.systemNavigationBarIconBrightness,
-        Brightness.dark,
+        Brightness.light,
       );
       expect(
         SystemChrome.latestStyle?.systemNavigationBarContrastEnforced,
         isFalse,
       );
+      expect(find.byKey(const ValueKey('play-episode-1')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('player-portrait-episodes')));
+      await tester.pumpAndSettle();
       expect(find.text('选集'), findsOneWidget);
-      expect(find.byKey(const ValueKey('play-episode-1')), findsOneWidget);
+      final episode = find.byKey(const ValueKey('play-episode-1'));
+      expect(episode, findsOneWidget);
+      expect(Theme.of(tester.element(episode)).brightness, Brightness.dark);
+      await tester.tap(find.byTooltip('收起面板'));
+      await tester.pumpAndSettle();
+      expect(episode, findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 10));

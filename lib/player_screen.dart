@@ -136,7 +136,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureRequested = false;
   bool _pictureInPictureHandlerInstalled = false;
   bool _televisionPlaybackRegistered = false;
-  bool _screenOnRequested = false;
+  bool? _screenOnRequested = false;
+  int _screenOnRequestGeneration = 0;
+  Timer? _screenOnDeadline;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String _loadingMessage = '正在准备播放';
   String? _error;
@@ -455,6 +457,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _syncScreenOn() {
+    if (_closed) _screenOnDeadline?.cancel();
     if (defaultTargetPlatform != TargetPlatform.android) return;
     final enabled =
         !_closed &&
@@ -466,10 +469,28 @@ class _PlayerScreenState extends State<PlayerScreen>
         (_playIntent || _findingNextSeason);
     if (enabled == _screenOnRequested) return;
     _screenOnRequested = enabled;
+    final generation = ++_screenOnRequestGeneration;
+    _screenOnDeadline?.cancel();
+    if (!_closed) {
+      _screenOnDeadline = Timer(const Duration(seconds: 2), () {
+        if (generation == _screenOnRequestGeneration) {
+          _screenOnRequested = null;
+        }
+      });
+    }
     unawaited(
       AppDevice.channel
           .invokeMethod<void>('setPlaybackScreenOn', {'enabled': enabled})
+          .then((_) {
+            if (generation == _screenOnRequestGeneration) {
+              _screenOnDeadline?.cancel();
+            }
+          })
           .catchError((Object error) {
+            if (generation == _screenOnRequestGeneration) {
+              _screenOnDeadline?.cancel();
+              _screenOnRequested = null;
+            }
             DiaryService.add('[ScreenOn] 播放亮屏状态设置失败: $error');
           }),
     );
@@ -1418,11 +1439,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _interactions.applySpeed();
         if (mounted && !_closed && ticket == _generation) {
           _transitionWaitTimer?.cancel();
-          _pendingError = false;
           setState(() {
             _loading = false;
             _smoothTransition = false;
           });
+          if (_pendingError) _queueRecovery();
           DiaryService.add(
             '[Switch] episode=${detail.episodes[index].number}, phase=ready',
           );

@@ -29,6 +29,7 @@ class SourceSyncTests(unittest.TestCase):
             'build/app.apk', 'dist/app.zip', '.dart_tool/package_config.json',
             'android/local.properties', 'android/key.properties', 'android/signing.jks',
             'android/gradlew', 'android/gradle/wrapper/gradle-wrapper.jar',
+            'android/.kotlin/sessions/compiler.salive',
             'android/app/src/main/jniLibs/arm64-v8a/libduanju_core.so',
             'native/vendor/example/dependency.go', 'native/build/core.dll',
             'windows/runner/duanju_core.dll', 'windows/runner/duanju_core.h',

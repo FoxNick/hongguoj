@@ -15,6 +15,7 @@ properties_file = root / 'android' / 'key.properties'
 if options.clean:
     if key_file.exists():
         key_file.unlink()
+    properties_file.unlink(missing_ok=True)
     raise SystemExit(0)
 
 if properties_file.exists():
@@ -25,8 +26,7 @@ names = ['ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD',
          'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']
 values = [os.environ.get(name, '') for name in names]
 if not any(values):
-    print('未配置签名 Secrets 且无预置签名：生成预览 APK。')
-    raise SystemExit(0)
+    raise SystemExit('缺少正式签名 Secrets，已阻止 release 构建。')
 if not all(values):
     raise SystemExit('Android 签名需要同时配置全部四个 Secrets。')
 try:

@@ -103,8 +103,18 @@ func TestNativeCoverFormatsFailuresAndOfflineFallback(t *testing.T) {
 	if nativeIsCoverImage(nativeDecodeCover([]byte("<html>verification required</html>"))) {
 		t.Fatal("HTML was accepted as a cover")
 	}
-	var calls atomic.Int32
+	var calls, metadataCalls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/detail/2/" {
+			metadataCalls.Add(1)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.URL.Path != "/cover" {
+			t.Error("unexpected synthetic cover route", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		switch calls.Add(1) {
 		case 1:
 			w.Write([]byte("<html>verification required</html>"))
@@ -116,10 +126,27 @@ func TestNativeCoverFormatsFailuresAndOfflineFallback(t *testing.T) {
 	}))
 	defer upstream.Close()
 	directory := t.TempDir()
-	engine, err := newNativeEngine(directory)
-	if err != nil {
-		t.Fatal(err)
+	open := func() *nativeEngine {
+		engine, err := newNativeEngine(directory)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(engine.downloads.close)
+		engine.downloader.cfg.HuangguoAIURL = upstream.URL
+		transport := engine.downloader.client.Transport
+		if transport == nil {
+			transport = http.DefaultTransport
+		}
+		engine.downloader.client.Transport = sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Scheme != "http" || request.URL.Host != upstream.Listener.Addr().String() {
+				t.Error("synthetic cover fixture rejected non-local request")
+				return nil, fmt.Errorf("fixture permits only its local HTTP server")
+			}
+			return transport.RoundTrip(request)
+		})
+		return engine
 	}
+	engine := open()
 	drama := nativeDrama{ID: "huangguoai:2", Source: sourceHuangguoAI, Cover: upstream.URL + "/cover"}
 	if _, err := engine.covers.load(context.Background(), drama, false); err == nil || len(engine.covers.entries) != 0 {
 		t.Fatal("invalid cover was cached")
@@ -132,15 +159,15 @@ func TestNativeCoverFormatsFailuresAndOfflineFallback(t *testing.T) {
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := newNativeEngine(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
+	restarted := open()
 	if cached, err := restarted.covers.load(context.Background(), drama, false); err != nil || cached != path || calls.Load() != 3 {
 		t.Fatal("expired image was not retained during a network failure", err, cached, calls.Load())
 	}
 	if _, err := restarted.covers.load(context.Background(), drama, true); err == nil {
 		t.Fatal("forced retry hid an upstream failure behind stale data")
+	}
+	if metadataCalls.Load() != 2 {
+		t.Fatal("failed cover repair did not use synthetic metadata", metadataCalls.Load())
 	}
 }
 
@@ -181,9 +208,14 @@ func TestNativeCoverRedirectAndBoundedDiskCache(t *testing.T) {
 
 func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 	var calls atomic.Int32
+	paths := map[string]bool{}
+	for _, category := range nativeAICategories {
+		paths["/api/videos/category/"+category.ID] = true
+	}
+	requestsPerPage := int32(len(paths))
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.URL.Path != "/api/videos/category/ai-duanju" {
+		if !paths[r.URL.Path] {
 			t.Error("test must only request synthetic catalog metadata", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -215,7 +247,7 @@ func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 	if err != nil || len(first.Items) != 24 || !first.Fresh || !first.HasMore {
 		t.Fatal("first catalog request failed", err, first)
 	}
-	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1}); err != nil || calls.Load() != 1 {
+	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1}); err != nil || calls.Load() != requestsPerPage {
 		t.Fatal("fresh catalog caused another request", err, calls.Load())
 	}
 	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 2}); err != nil {
@@ -226,10 +258,10 @@ func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 	if len(cached.Items) != 25 || cached.Page != 2 || cached.HasMore || !cached.Fresh {
 		t.Fatal("cached pagination state did not survive a restart", cached)
 	}
-	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1}); err != nil || calls.Load() != 2 {
+	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1}); err != nil || calls.Load() != 2*requestsPerPage {
 		t.Fatal("restart bypassed fresh disk cache", err, calls.Load())
 	}
-	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1, Force: true}); err != nil || calls.Load() != 3 {
+	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1, Force: true}); err != nil || calls.Load() != 3*requestsPerPage {
 		t.Fatal("manual refresh reused old data", err, calls.Load())
 	}
 	state := engine.catalogStates[sourceHuangguoAI]
@@ -238,7 +270,7 @@ func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 	if engine.nativeCached(sourceHuangguoAI).Fresh {
 		t.Fatal("expired catalog is marked fresh")
 	}
-	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1}); err != nil || calls.Load() != 4 {
+	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHuangguoAI, Page: 1}); err != nil || calls.Load() != 4*requestsPerPage {
 		t.Fatal("expired catalog was not updated", err, calls.Load())
 	}
 }

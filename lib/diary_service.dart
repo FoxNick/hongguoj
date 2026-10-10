@@ -79,7 +79,10 @@ class DiaryService {
                 onPressed: () => copyToClipboard(dialogContext),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white70),
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.white70,
+                ),
                 tooltip: '清空日记',
                 onPressed: () => clear(),
               ),

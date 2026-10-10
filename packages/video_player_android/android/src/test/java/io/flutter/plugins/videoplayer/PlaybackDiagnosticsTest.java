@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import androidx.media3.common.Format;
+import androidx.media3.common.C;
 import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.ExoPlayer;
 import java.util.Map;
@@ -16,6 +17,16 @@ import org.robolectric.annotation.Config;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28)
 public class PlaybackDiagnosticsTest {
+  @Test
+  public void durationRefreshesAfterInitiallyUnknownTimeline() {
+    ExoPlayer player = mock(ExoPlayer.class);
+    PlaybackDiagnostics stats = new PlaybackDiagnostics(player, "surface-hybrid");
+    when(player.getDuration()).thenReturn(C.TIME_UNSET);
+    assertEquals(0L, stats.snapshot().get("durationMs"));
+    when(player.getDuration()).thenReturn(90000L);
+    assertEquals(90000L, stats.snapshot().get("durationMs"));
+  }
+
   @Test
   public void countersSurviveDecoderRestartWithoutDoubleCountingSnapshots() {
     ExoPlayer player = mock(ExoPlayer.class);

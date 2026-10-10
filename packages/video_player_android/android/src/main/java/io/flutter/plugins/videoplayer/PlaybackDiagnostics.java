@@ -90,6 +90,7 @@ final class PlaybackDiagnostics implements AnalyticsListener {
     values.put("decoderInitCount", counters.decoderInitCount);
     values.put("processingOffsetAvgUs", counters.videoFrameProcessingOffsetCount == 0 ? 0L
         : counters.totalVideoFrameProcessingOffsetUs / counters.videoFrameProcessingOffsetCount);
+    values.put("durationMs", Math.max(0L, player.getDuration()));
     values.put("positionMs", player.getCurrentPosition());
     values.put("bufferedAheadMs", Math.max(0L, player.getBufferedPosition() - player.getCurrentPosition()));
     values.put("playing", player.isPlaying());

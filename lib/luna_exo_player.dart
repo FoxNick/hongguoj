@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:media_kit/src/models/player_log.dart';
 import 'package:media_kit/src/models/player_stream.dart';
 import 'package:media_kit/src/player/platform_player.dart';
 import 'package:video_player/video_player.dart';
+
 import 'diary_service.dart';
 
 /// 模拟与 media_kit.PlayerStream 接口对齐的流集合
@@ -122,6 +124,7 @@ class LunaExoPlayer implements Player {
   Timer? _nativeStartupTimer;
   bool _nativeDiagnosticUnavailable = false;
   bool _nativeSnapshotPending = false;
+  int _durationRefreshTicks = 0;
   final _diagnosticClock = Stopwatch();
   int _diagnosticReportedAt = 0;
   int? _bufferStartedAt;
@@ -601,9 +604,12 @@ class LunaExoPlayer implements Player {
     _buildPeakUs = _rasterPeakUs = 0;
   }
 
-  Future<void> reportNativeDiagnostics() async {
+  Future<void> reportNativeDiagnostics({bool log = true}) async {
     final c = _controller;
-    if (c == null || _nativeDiagnosticUnavailable || _nativeSnapshotPending) {
+    if (c == null ||
+        _transitioning ||
+        _nativeDiagnosticUnavailable ||
+        _nativeSnapshotPending) {
       return;
     }
     final generation = _openGeneration;
@@ -617,7 +623,17 @@ class LunaExoPlayer implements Player {
       if (_disposed || generation != _openGeneration || _controller != c) {
         return;
       }
-      if (values != null) {
+      final durationMs = values?['durationMs'];
+      if (!_transitioning &&
+          c.value.duration <= Duration.zero &&
+          durationMs is num &&
+          durationMs.isFinite &&
+          durationMs > 0) {
+        c.value = c.value.copyWith(
+          duration: Duration(milliseconds: durationMs.toInt()),
+        );
+      }
+      if (values != null && log) {
         DiaryService.add(
           '[VideoStats] ${values.entries.map((e) => '${e.key}=${e.value}').join(', ')}',
         );
@@ -625,7 +641,10 @@ class LunaExoPlayer implements Player {
     } on MissingPluginException {
       if (generation == _openGeneration) _nativeDiagnosticUnavailable = true;
     } catch (e) {
-      if (!_disposed && generation == _openGeneration && _controller == c) {
+      if (log &&
+          !_disposed &&
+          generation == _openGeneration &&
+          _controller == c) {
         DiaryService.add('[VideoStats] snapshot unavailable: $e');
       }
     } finally {
@@ -645,9 +664,16 @@ class LunaExoPlayer implements Player {
 
   void _startPositionPolling() {
     _positionPollTimer?.cancel();
+    _durationRefreshTicks = 0;
     _positionPollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
       final c = _controller;
       if (c == null || !c.value.isInitialized) return;
+      if (!_transitioning && c.value.duration <= Duration.zero) {
+        if (++_durationRefreshTicks >= 4) {
+          _durationRefreshTicks = 0;
+          unawaited(reportNativeDiagnostics(log: false));
+        }
+      }
       final pos = c.value.position;
       if (pos != state.position) {
         state = state.copyWith(position: pos);

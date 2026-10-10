@@ -7,6 +7,7 @@ import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:duanju_app/television_controls.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,7 +38,7 @@ class ScreenOnPlayer extends ScriptedPlayer {
 }
 
 void main() {
-  for (final mode in ['portrait', 'fullscreen', 'television']) {
+  for (final mode in ['portrait', 'fullscreen', 'television', 'retry']) {
     testWidgets(
       '$mode playback keeps screen on through buffering and handoff',
       (tester) async {
@@ -51,6 +52,9 @@ void main() {
         messenger.setMockMethodCallHandler(AppDevice.channel, (call) async {
           if (call.method == 'setPlaybackScreenOn') {
             requests.add((call.arguments as Map)['enabled'] as bool);
+            if (mode == 'retry' && requests.length == 1) {
+              throw PlatformException(code: 'transient-screen-on');
+            }
           }
           if (call.method == 'setFullscreenBrightness') return true;
           if (call.method == 'batteryStatus') {
@@ -88,13 +92,19 @@ void main() {
         await frames();
         platform.videoSize(1920, 1080);
         await frames();
+        if (mode == 'retry') {
+          await tester.pump(const Duration(seconds: 1));
+          await frames();
+          expect(requests, [true, true]);
+          requests.removeAt(0);
+        }
         expect(requests, [true]);
         if (mode != 'television') {
           expect(
             tester
                 .widget<PlayerControls>(find.byType(PlayerControls))
                 .fullscreen,
-            mode == 'fullscreen',
+            mode == 'fullscreen' || mode == 'retry',
           );
         }
         platform.buffering(true);

@@ -6,6 +6,8 @@ import 'package:duanju_app/follow_state.dart';
 import 'package:duanju_app/home_screen.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
+import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/playback_launch_screen.dart';
 import 'package:duanju_app/saved_library.dart';
 import 'package:duanju_app/widgets.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +15,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'library_feature_fixtures.dart';
+
+class LibraryNavigationObserver extends NavigatorObserver {
+  final pushed = <Route<dynamic>>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route);
+  }
+}
 
 void main() {
   const first = LibraryFeatureRepository.first;
@@ -335,28 +346,56 @@ void main() {
   );
 
   testWidgets(
-    'catalog card waits on home then opens player without launch page',
+    'catalog card shows a cancellable loading dialog then pushes one player',
     (tester) async {
       viewport(tester, const Size(390, 844));
       final store = await create();
       final repository = LibraryFeatureRepository()
         ..pendingDetail = Completer<DramaDetail>();
+      final observer = LibraryNavigationObserver();
       await tester.pumpWidget(
         MaterialApp(
+          navigatorObservers: [observer],
           home: HomeScreen(repository: repository, store: store),
         ),
       );
       await tester.pumpAndSettle();
+      final origin = tester.element(find.byType(HomeScreen));
       await tester.tap(find.byKey(ValueKey(first.id)));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
-      expect(find.text('正在进入播放'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('playback-launch-loading')),
+        findsOneWidget,
+      );
+      expect(find.text('正在进入播放'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+      expect(find.byType(PlaybackLaunchScreen), findsNothing);
       expect(find.text('立即播放'), findsNothing);
-      expect(find.text('合成一号'), findsOneWidget);
+      expect(find.text('合成一号'), findsNWidgets(2));
       expect(repository.detailRequests, [first.id]);
       repository.pendingDetail!.complete(
         LibraryFeatureRepository.makeDetail(first, 2),
       );
+      for (var i = 0; i < 10; i++) {
+        await tester.idle();
+      }
+      final routes = observer.pushed
+          .whereType<MaterialPageRoute<void>>()
+          .where((route) => route.builder(origin) is PlayerScreen)
+          .toList();
+      expect(routes, hasLength(1));
+      final player = routes.single.builder(origin) as PlayerScreen;
+      expect(player.detail.drama.id, first.id);
+      expect(player.initialIndex, 0);
+      observer.navigator!.removeRoute(routes.single);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('playback-launch-loading')),
+        findsNothing,
+      );
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

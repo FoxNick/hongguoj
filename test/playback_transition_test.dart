@@ -7,11 +7,14 @@ import 'package:duanju_app/models.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/player_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'fixtures.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 // ignore: depend_on_referenced_packages
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
+
 import 'luna_exo_diagnostics_test.dart' show DiagnosticVideoPlatform;
 
 class TransitionRepository extends FixtureRepository {
@@ -190,6 +193,73 @@ void main() {
       store.dispose();
     },
   );
+
+  test(
+    'late transition duration is refreshed without reopening the player',
+    () async {
+      var durationMs = 0;
+      var snapshots = 0;
+      messenger.setMockMethodCallHandler(LunaExoPlayer.diagnosticChannel, (
+        call,
+      ) async {
+        if (call.method == 'transition') return {...response, 'durationMs': 0};
+        snapshots++;
+        return {'durationMs': durationMs};
+      });
+      final player = LunaExoPlayer();
+      final durations = <Duration>[];
+      final subscription = player.stream.duration.listen(durations.add);
+      await player.open(Media('file:///synthetic-1.mp4'));
+      final controller = player.controller;
+      await player.transitionTo(Media('file:///synthetic-2.mp4'));
+      expect(player.state.duration, Duration.zero);
+      for (var i = 0; i < 12; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      expect(player.state.duration, Duration.zero);
+      durationMs = 90000;
+      for (var i = 0; i < 4; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      expect(player.controller, same(controller));
+      expect(controller!.value.duration, const Duration(seconds: 90));
+      expect(player.state.duration, const Duration(seconds: 90));
+      expect(durations.last, const Duration(seconds: 90));
+      expect(platform.created, 1);
+      final calls = snapshots;
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      expect(snapshots, calls);
+      await subscription.cancel();
+      await player.dispose();
+    },
+  );
+
+  test('stale duration snapshot cannot change a newer transition', () async {
+    final pending = Completer<Map<String, Object>>();
+    var hold = false;
+    messenger.setMockMethodCallHandler(LunaExoPlayer.diagnosticChannel, (call) {
+      if (call.method == 'transition') {
+        return Future.value({...response, 'durationMs': 0});
+      }
+      return hold ? pending.future : Future.value({});
+    });
+    final player = LunaExoPlayer();
+    addTearDown(player.dispose);
+    await player.open(Media('file:///synthetic-1.mp4'));
+    await player.transitionTo(Media('file:///synthetic-2.mp4'));
+    await Future<void>.delayed(Duration.zero);
+    hold = true;
+    final stale = player.reportNativeDiagnostics(log: false);
+    await Future<void>.delayed(Duration.zero);
+    await player.transitionTo(Media('file:///synthetic-3.mp4'));
+    pending.complete({'durationMs': 90000});
+    await stale;
+    expect(player.state.duration, Duration.zero);
+    expect(player.controller!.value.duration, Duration.zero);
+    expect(platform.created, 1);
+  });
 
   test(
     'twenty automatic transitions retain one initialized controller and reset each episode',

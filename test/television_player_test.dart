@@ -1,0 +1,371 @@
+import 'dart:async';
+import 'package:duanju_app/app_layout.dart';
+import 'package:duanju_app/local_store.dart';
+import 'package:duanju_app/models.dart';
+import 'package:duanju_app/player_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fixtures.dart';
+import 'player_fixtures.dart';
+import 'remote_test_helpers.dart';
+
+void main() {
+  setUp(mockPlayerDevice);
+  Future<void> nativeBack(WidgetTester tester) async {
+    final completed = Completer<void>();
+    tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      AppDevice.channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('televisionBackPressed'),
+      ),
+      (_) => completed.complete(),
+    );
+    await tester.pump();
+    await completed.future;
+  }
+
+  Future<void> settle(WidgetTester tester) async {
+    for (var index = 0; index < 24; index++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+  }
+
+  Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
+    await tester.sendKeyEvent(key);
+    await settle(tester);
+  }
+
+  Future<LocalStore> mount(
+    WidgetTester tester,
+    RouteRepository repository,
+    ScriptedPlayer player, {
+    int initialIndex = 0,
+  }) async {
+    tester.view.physicalSize = const Size(960, 540);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    final detail = DramaDetail(
+      FixtureRepository.free,
+      List.generate(100, (index) => Episode({'id': '${index + 1}'}, index + 1)),
+    );
+    await tester.pumpWidget(
+      televisionHost(
+        child: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                child: const Text('打开测试视频'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => PlayerScreen(
+                      detail: detail,
+                      initialIndex: initialIndex,
+                      initialPosition: 7,
+                      repository: repository,
+                      store: store,
+                      playerFactory: () => Player(platformPlayer: player),
+                      videoBuilder: (controls) => controls,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开测试视频'));
+    await settle(tester);
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    return store;
+  }
+
+  Future<void> leave(
+    WidgetTester tester,
+    RouteRepository repository,
+    ScriptedPlayer player,
+  ) async {
+    await press(tester, LogicalKeyboardKey.escape);
+    if (find.byType(PlayerScreen).evaluate().isNotEmpty) {
+      await press(tester, LogicalKeyboardKey.escape);
+    }
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    expect(find.text('打开测试视频'), findsOneWidget);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(player.disposed, isTrue);
+    expect(repository.active, isEmpty);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await settle(tester);
+  }
+
+  testWidgets(
+    'TV remote pauses, seeks when hidden, seeks on the timeline and returns from fullscreen',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      final store = await mount(tester, repository, player);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
+      await press(tester, LogicalKeyboardKey.select);
+      expect(player.state.playing, isFalse);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(player.state.playing, isTrue);
+      await tester.pump(const Duration(seconds: 6));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(player.state.playing, isFalse);
+      await press(tester, LogicalKeyboardKey.select);
+      await tester.pump(const Duration(seconds: 6));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(player.state.position, const Duration(seconds: 22));
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(player.state.position, Duration.zero);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'tv-player-progress',
+      );
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(player.state.position, const Duration(seconds: 15));
+      await leave(tester, repository, player);
+      expect(store.watched(FixtureRepository.free.id)?.position, 15);
+    },
+  );
+
+  testWidgets(
+    'TV selection restores the current episode and panels keep focus during playback',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player, initialIndex: 70);
+      focusRemote(tester, find.byKey(const ValueKey('tv-episodes')));
+      await settle(tester);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'tv-player-episodes',
+      );
+      await press(tester, LogicalKeyboardKey.select);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'remote-71');
+      await tester.pump(const Duration(seconds: 6));
+      await settle(tester);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'remote-71');
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(repository.requestedEpisodes.last, 72);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'tv-player-episodes',
+      );
+      expect(repository.active.length, 1);
+      focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('倍速'), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(player.state.rate, 1.25);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'tv-player-settings',
+      );
+      await player.seek(const Duration(seconds: 28));
+      await player.pause();
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.select);
+      focusRemote(tester, find.byKey(const ValueKey('tv-quality-1080')));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(repository.requestedQualities.last, 720);
+      expect(player.state.position, const Duration(seconds: 28));
+      expect(player.state.rate, 1.25);
+      expect(player.state.playing, isFalse);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'tv-player-settings',
+      );
+      await leave(tester, repository, player);
+    },
+  );
+
+  testWidgets('TV system back hides controls before leaving playback', (
+    tester,
+  ) async {
+    final repository = RouteRepository();
+    final player = ScriptedPlayer();
+    await mount(tester, repository, player);
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await settle(tester);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(player.disposed, isTrue);
+    expect(repository.active, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'native TV back closes the modal, then paused controls immediately, then leaves playback',
+    (tester) async {
+      final active = <bool>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        AppDevice.channel,
+        (call) async {
+          if (call.method == 'setTelevisionPlaybackActive') {
+            active.add((call.arguments as Map)['active'] as bool);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          AppDevice.channel,
+          null,
+        ),
+      );
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      expect(active, [true]);
+      await player.pause();
+      await settle(tester);
+      focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('播放设置'), findsOneWidget);
+      await nativeBack(tester);
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle(tester);
+      expect(find.text('播放设置'), findsNothing);
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsOneWidget);
+      await nativeBack(tester);
+      await settle(tester);
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(player.state.playing, false);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
+      expect(
+        ModalRoute.of(
+          tester.element(find.byType(PlayerScreen)),
+        )!.popDisposition,
+        RoutePopDisposition.pop,
+      );
+      await nativeBack(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle(tester);
+      expect(find.byType(PlayerScreen), findsNothing);
+      expect(player.disposed, true);
+      expect(repository.active, isEmpty);
+      expect(active, [true, false]);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'native TV back dismisses a seek preview without leaving playback',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      await tester.pump(const Duration(seconds: 6));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(find.byKey(const ValueKey('tv-seek-preview')), findsOneWidget);
+      await nativeBack(tester);
+      await settle(tester);
+      expect(find.byKey(const ValueKey('tv-seek-preview')), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(player.state.playing, true);
+      await leave(tester, repository, player);
+    },
+  );
+
+  testWidgets(
+    'TV playback error puts remote focus on retry and restores controls after retry',
+    (tester) async {
+      final repository = RouteRepository()..broken = true;
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      for (var attempt = 0; attempt < 5; attempt++) {
+        await tester.pump(const Duration(seconds: 1));
+        await settle(tester);
+      }
+      expect(find.text('重试播放'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
+      repository.broken = false;
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('重试播放'), findsNothing);
+      expect(player.state.position, const Duration(seconds: 7));
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'tv-player-play');
+      await leave(tester, repository, player);
+    },
+  );
+  testWidgets(
+    'stopped playback with play intent recovers, but an intentional pause does not',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      await player.pause();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1)),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 21)),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await settle(tester);
+      expect(repository.fallbackCalls, 1);
+      expect(player.state.playing, true);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(player.state.playing, false);
+      final opens = player.opened.length;
+      for (var second = 0; second < 25; second++) {
+        await tester.pump(const Duration(seconds: 1));
+        await settle(tester);
+      }
+      expect(player.opened.length, opens);
+      expect(player.state.playing, false);
+      await leave(tester, repository, player);
+    },
+  );
+
+  testWidgets(
+    'automatic episode advancement survives twenty episodes without retained sessions',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      for (var episode = 2; episode <= 20; episode++) {
+        player.finishEpisode();
+        await settle(tester);
+        expect(repository.requestedEpisodes.last, episode);
+        expect(player.state.playing, true);
+        expect(repository.active.length, 1);
+      }
+      await leave(tester, repository, player);
+    },
+  );
+}

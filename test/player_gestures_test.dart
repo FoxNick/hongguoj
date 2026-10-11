@@ -321,6 +321,15 @@ void main() {
         final b = tester.getRect(play);
         expect(a.right, lessThanOrEqualTo(b.left));
         expect(a.center.dy, b.center.dy);
+        final forward = find.byKey(const ValueKey('player-mobile-forward'));
+        final next = find.byKey(const ValueKey('player-mobile-next'));
+        if (size.width > size.height) {
+          expect(tester.getRect(forward).left, b.right);
+          expect(tester.getRect(next).left, tester.getRect(forward).right);
+        } else {
+          expect(forward, findsNothing);
+          expect(next, findsNothing);
+        }
         expect(tester.getRect(toggle).bottom, lessThan(100));
         final header = tester.widget<Text>(
           find.byKey(const ValueKey('player-header-title')),

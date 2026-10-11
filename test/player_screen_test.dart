@@ -297,6 +297,33 @@ void main() {
     }
   });
 
+  testWidgets(
+    'fullscreen transport seeks and advances through existing playback logic',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        final repository = RouteRepository();
+        final player = ScriptedPlayer();
+        await mount(tester, repository, player, size: const Size(960, 540));
+        player.videoSize(1920, 1080);
+        await settleOperations(tester);
+        await tester.tap(find.byKey(const ValueKey('player-mobile-forward')));
+        await settleOperations(tester);
+        expect(player.state.position, const Duration(seconds: 22));
+        expect(player.opened.length, 1);
+        await tester.tap(find.byKey(const ValueKey('player-mobile-next')));
+        await settleOperations(tester);
+        expect(player.opened.length, 2);
+        expect(find.text('第 2 集'), findsOneWidget);
+        expect(player.state.position, Duration.zero);
+        expect(player.state.playing, isTrue);
+        await unmount(tester, player);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
   testWidgets('mobile player pane starts below the system status area', (
     tester,
   ) async {

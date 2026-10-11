@@ -968,6 +968,32 @@ class _PlayerControlsState extends State<PlayerControls> {
               }
             : null,
       ),
+      if (fullscreen) ...[
+        _toolText(
+          key: const ValueKey('player-mobile-forward'),
+          tooltip: '快进15秒',
+          label: '+15s',
+          width: 36,
+          onPressed:
+              widget.enabled && widget.player.state.duration > Duration.zero
+              ? () {
+                  widget.interactions.seek(15);
+                  _show();
+                }
+              : null,
+        ),
+        _toolIcon(
+          key: const ValueKey('player-mobile-next'),
+          tooltip: '下一集',
+          icon: Icons.skip_next_rounded,
+          onPressed: widget.enabled && widget.onNext != null
+              ? () {
+                  widget.onNext!();
+                  _show();
+                }
+              : null,
+        ),
+      ],
       _toolText(
         key: const ValueKey('player-speed'),
         tooltip: '倍速',
@@ -1001,14 +1027,23 @@ class _PlayerControlsState extends State<PlayerControls> {
               : null,
         ),
     ];
+    final transportCount = fullscreen ? 4 : 2;
+    final transport = _toolGroup(tools.take(transportCount).toList());
+    final options = _toolGroup(tools.skip(transportCount).toList());
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
-      child: Row(
-        children: [
-          _toolGroup(tools.take(2).toList()),
-          const Spacer(),
-          _toolGroup(tools.skip(2).toList()),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (fullscreen && constraints.maxWidth < tools.length * 48 + 12) {
+            return Column(
+              children: [
+                Align(alignment: Alignment.centerLeft, child: transport),
+                Align(alignment: Alignment.centerRight, child: options),
+              ],
+            );
+          }
+          return Row(children: [transport, const Spacer(), options]);
+        },
       ),
     );
   }

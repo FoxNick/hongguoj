@@ -12,6 +12,7 @@ class DeferredRepository extends FixtureRepository {
   final released = <String>[];
   Completer<PlaybackPlan>? alternate;
   int cancellations = 0;
+  Completer<void>? cancellation;
 
   @override
   Future<PlaybackPlan> resolve(
@@ -33,6 +34,7 @@ class DeferredRepository extends FixtureRepository {
   @override
   Future<void> cancelPlayback() async {
     cancellations++;
+    await cancellation?.future;
   }
 
   @override
@@ -43,6 +45,33 @@ void main() {
   Episode episode(int number) =>
       Episode({'id': '$number', 'currentEpisode': number}, number);
   Future<void> tick() => Future<void>.delayed(Duration.zero);
+
+  test(
+    'prepared plan promotion does not wait for resolver cancellation',
+    () async {
+      final repository = DeferredRepository();
+      final loader = PlaybackLoader(repository);
+      final old = loader.load(FixtureRepository.free, episode(1));
+      await tick();
+      repository.cancellation = Completer<void>();
+      final ready = await loader.use(
+        const PlaybackPlan(
+          url: 'file:///next.mp4',
+          session: 'next',
+          startupReady: true,
+        ),
+      );
+      expect(ready?.session, 'next');
+      expect(repository.cancellation!.isCompleted, false);
+      repository.pending[1]!.complete(
+        const PlaybackPlan(url: 'file:///stale.mp4', session: 'stale'),
+      );
+      expect(await old, isNull);
+      expect(repository.released, ['stale']);
+      repository.cancellation!.complete();
+      await loader.close();
+    },
+  );
 
   test(
     'hung resolution times out and late resources cannot replace a retry',

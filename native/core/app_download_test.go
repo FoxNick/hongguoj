@@ -169,7 +169,7 @@ func TestNativeDownloadRangeResumeAndAddressIsolation(t *testing.T) {
 }
 
 func TestNativeDownloadRangeServersCannotMixFiles(t *testing.T) {
-	for _, mode := range []string{"ignored", "changed", "invalid", "no-validator", "range-rejected"} {
+	for _, mode := range []string{"ignored", "changed", "invalid", "no-validator", "missing-validator", "range-rejected"} {
 		t.Run(mode, func(t *testing.T) {
 			data := []byte("a-completely-new-synthetic-file")
 			var requests atomic.Int32
@@ -179,7 +179,10 @@ func TestNativeDownloadRangeServersCannotMixFiles(t *testing.T) {
 				w.Header().Set("ETag", "\"new\"")
 				if r.Header.Get("Range") != "" {
 					switch mode {
-					case "changed", "invalid":
+					case "changed", "invalid", "missing-validator":
+						if mode == "missing-validator" {
+							w.Header().Del("ETag")
+						}
 						start := 4
 						if mode == "invalid" {
 							start = 5
@@ -231,7 +234,7 @@ func TestNativeDownloadRangeServersCannotMixFiles(t *testing.T) {
 				t.Fatalf("mixed old and new bytes: %q", got)
 			}
 			want := int32(1)
-			if mode == "changed" || mode == "range-rejected" {
+			if mode == "changed" || mode == "missing-validator" || mode == "range-rejected" {
 				want = 2
 			}
 			if requests.Load() != want {

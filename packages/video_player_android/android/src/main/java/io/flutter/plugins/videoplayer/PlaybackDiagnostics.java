@@ -4,6 +4,8 @@ import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Build;
 import androidx.media3.common.Format;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.Timeline;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -21,11 +23,25 @@ final class PlaybackDiagnostics implements AnalyticsListener {
   private String hardware = "unknown";
   private String codecError = "none";
   private long decoderInitMs;
+  private MediaItem renderedMediaItem;
 
   PlaybackDiagnostics(ExoPlayer player, String output) {
     this.player = player;
     this.output = output;
     player.addAnalyticsListener(this);
+  }
+
+  @Override
+  public void onRenderedFirstFrame(EventTime eventTime, Object output, long renderTimeMs) {
+    if (!eventTime.timeline.isEmpty() && eventTime.windowIndex >= 0
+        && eventTime.windowIndex < eventTime.timeline.getWindowCount()) {
+      renderedMediaItem = eventTime.timeline.getWindow(
+          eventTime.windowIndex, new Timeline.Window()).mediaItem;
+    }
+  }
+
+  boolean hasFrameFor(MediaItem item) {
+    return item != null && item.equals(renderedMediaItem);
   }
 
   @Override

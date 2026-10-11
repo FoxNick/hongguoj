@@ -4,16 +4,22 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.Timeline;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.MediaSource;
 import io.flutter.plugin.common.MethodChannel;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
@@ -25,6 +31,7 @@ public class PlaybackTransitionTest {
   private PlaybackTransition transition;
   private MethodChannel.Result result;
   private MediaSource source;
+  private MediaItem item;
 
   @Before
   public void setUp() {
@@ -34,54 +41,98 @@ public class PlaybackTransitionTest {
     when(player.getCurrentTracks()).thenReturn(tracks);
     when(player.getDuration()).thenReturn(90000L);
     when(player.getVideoSize()).thenReturn(new VideoSize(1920, 1080));
-    source = mock(MediaSource.class);
+    item = new MediaItem.Builder().setUri("http://127.0.0.1/synthetic").setMediaId("first").build();
+    source = source(item);
     result = mock(MethodChannel.Result.class);
     transition = new PlaybackTransition(player);
   }
 
+  private static MediaSource source(MediaItem item) {
+    MediaSource source = mock(MediaSource.class);
+    when(source.getMediaItem()).thenReturn(item);
+    return source;
+  }
+
+  private AnalyticsListener listener() {
+    ArgumentCaptor<AnalyticsListener> capture = ArgumentCaptor.forClass(AnalyticsListener.class);
+    verify(player, atLeastOnce()).addAnalyticsListener(capture.capture());
+    return capture.getValue();
+  }
+
+  private static AnalyticsListener.EventTime time(MediaItem item) {
+    Timeline timeline = mock(Timeline.class);
+    when(timeline.getWindowCount()).thenReturn(1);
+    when(timeline.isEmpty()).thenReturn(false);
+    when(timeline.getWindow(eq(0), any(Timeline.Window.class))).thenAnswer(invocation -> {
+      Timeline.Window window = invocation.getArgument(1);
+      window.mediaItem = item;
+      return window;
+    });
+    return new AnalyticsListener.EventTime(0, timeline, 0, null, 0, timeline, 0, null, 0, 0);
+  }
+
+  private void ready(AnalyticsListener listener) {
+    listener.onPlaybackStateChanged(time(item), Player.STATE_READY);
+  }
+
+  private void frame(AnalyticsListener listener) {
+    listener.onRenderedFirstFrame(time(item), new Object(), 0);
+  }
+
   @Test
-  public void readyWaitsForFirstFrameWithoutReleasingPlayerOrSurface() {
+  public void readyWaitsForActualFirstFrameWithoutReleasingPlayerOrSurface() {
     transition.replace(source, result);
+    AnalyticsListener listener = listener();
     verify(player).setPlayWhenReady(false);
     verify(player).setMediaSource(source);
     verify(player).prepare();
-    transition.onPlaybackStateChanged(Player.STATE_READY);
+    ready(listener);
     verifyNoInteractions(result);
     assertTrue(transition.pending());
-    transition.onRenderedFirstFrame();
-    verify(result).success(argThat(value ->
-        ((java.util.Map<?, ?>) value).get("durationMs").equals(90000L)));
+    frame(listener);
+    verify(result).success(argThat(value -> Boolean.TRUE.equals(((Map<?, ?>) value).get("firstFrame"))
+        && ((Map<?, ?>) value).get("durationMs").equals(90000L)));
     assertFalse(transition.pending());
     verify(player, never()).release();
     verify(player, never()).clearVideoSurface();
-    transition.onRenderedFirstFrame();
+    frame(listener);
     verify(result, times(1)).success(any());
   }
 
   @Test
   public void timeoutAndDisposeReplyOnceAndDetachListener() {
     transition.replace(source, result);
+    AnalyticsListener listener = listener();
     ShadowLooper.idleMainLooper(8, TimeUnit.SECONDS);
     verify(result).error(eq("transition_timeout"), anyString(), isNull());
-    verify(player).removeListener(transition);
+    verify(player).removeAnalyticsListener(listener);
     assertFalse(transition.pending());
     transition.dispose();
-    transition.onRenderedFirstFrame();
+    frame(listener);
     verify(result, never()).success(any());
     verifyNoMoreInteractions(result);
   }
 
   @Test
-  public void readyWithoutFirstFrameReturnsPreparationResultAfterGrace() {
-    transition.replace(source, result);
-    transition.onPlaybackStateChanged(Player.STATE_READY);
+  public void readyFallbackReportsNoFrameAndRecordsActualFrameLater() {
+    transition.replace(source, null, 450, result);
+    AnalyticsListener listener = listener();
+    ready(listener);
     ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
     verify(result).success(argThat(value ->
-        Boolean.FALSE.equals(((java.util.Map<?, ?>) value).get("firstFrame"))));
+        Boolean.FALSE.equals(((Map<?, ?>) value).get("firstFrame"))
+            && Boolean.TRUE.equals(((Map<?, ?>) value).get("ready"))
+            && ((Long) ((Map<?, ?>) value).get("requestElapsedMs")) >= 700));
     assertFalse(transition.pending());
-    verify(player, never()).release();
+    assertFalse((Boolean) transition.snapshot().get("transitionFirstFrame"));
+    ShadowLooper.idleMainLooper(100, TimeUnit.MILLISECONDS);
+    frame(listener);
+    assertTrue((Boolean) transition.snapshot().get("transitionFirstFrame"));
+    assertEquals(350L, transition.snapshot().get("transitionFirstFrameMs"));
+    assertEquals(800L, transition.snapshot().get("transitionRequestFirstFrameMs"));
+    verify(player).removeAnalyticsListener(listener);
     ShadowLooper.idleMainLooper(8, TimeUnit.SECONDS);
-    transition.onRenderedFirstFrame();
+    frame(listener);
     verify(result, times(1)).success(any());
     verify(result, never()).error(anyString(), anyString(), any());
   }
@@ -89,11 +140,12 @@ public class PlaybackTransitionTest {
   @Test
   public void bufferingCancelsReadyGraceUntilReadyAgain() {
     transition.replace(source, result);
-    transition.onPlaybackStateChanged(Player.STATE_READY);
-    transition.onPlaybackStateChanged(Player.STATE_BUFFERING);
+    AnalyticsListener listener = listener();
+    ready(listener);
+    listener.onPlaybackStateChanged(time(item), Player.STATE_BUFFERING);
     ShadowLooper.idleMainLooper(300, TimeUnit.MILLISECONDS);
     verifyNoInteractions(result);
-    transition.onPlaybackStateChanged(Player.STATE_READY);
+    ready(listener);
     ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
     verify(result).success(any());
   }
@@ -102,23 +154,60 @@ public class PlaybackTransitionTest {
   public void unknownDurationDoesNotPreventPreparedMediaFromStarting() {
     when(player.getDuration()).thenReturn(C.TIME_UNSET);
     transition.replace(source, result);
-    transition.onPlaybackStateChanged(Player.STATE_READY);
-    transition.onRenderedFirstFrame();
+    AnalyticsListener listener = listener();
+    ready(listener);
+    frame(listener);
     ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
-    verify(result).success(argThat(value ->
-        ((java.util.Map<?, ?>) value).get("durationMs").equals(0L)));
+    verify(result).success(argThat(value -> ((Map<?, ?>) value).get("durationMs").equals(0L)));
   }
 
   @Test
-  public void replacementCancelsOnlyPreviousPendingReply() {
+  public void replacementAndReversedSwitchRejectCallbacksFromOlderGenerations() {
     transition.replace(source, result);
+    AnalyticsListener previous = listener();
+    MediaItem nextItem = item.buildUpon().setMediaId("second").build();
     MethodChannel.Result next = mock(MethodChannel.Result.class);
-    transition.replace(source, next);
+    transition.replace(source(nextItem), next);
+    AnalyticsListener current = listener();
     verify(result).error(eq("transition_cancelled"), anyString(), isNull());
-    transition.onRenderedFirstFrame();
+    previous.onRenderedFirstFrame(time(item), new Object(), 0);
+    ready(previous);
+    current.onRenderedFirstFrame(time(item), new Object(), 0);
+    ready(current);
+    current.onPlayerError(time(item), new PlaybackException("stale", null, 1000));
     verifyNoInteractions(next);
-    transition.onPlaybackStateChanged(Player.STATE_READY);
+    current.onPlaybackStateChanged(time(nextItem), Player.STATE_READY);
+    current.onRenderedFirstFrame(time(nextItem), new Object(), 0);
     verify(next).success(any());
-    verify(result, never()).success(any());
+    MethodChannel.Result reversed = mock(MethodChannel.Result.class);
+    MediaItem reversedItem = item.buildUpon().setMediaId("third").build();
+    transition.replace(source(reversedItem), reversed);
+    AnalyticsListener latest = listener();
+    latest.onRenderedFirstFrame(time(item), new Object(), 0);
+    latest.onPlaybackStateChanged(time(item), Player.STATE_READY);
+    verifyNoInteractions(reversed);
+    latest.onPlaybackStateChanged(time(reversedItem), Player.STATE_READY);
+    latest.onRenderedFirstFrame(time(reversedItem), new Object(), 0);
+    verify(reversed).success(any());
+  }
+
+  @Test
+  public void preparationExceptionReportsFailureWithoutReleasingExistingPlayer() {
+    doThrow(new IllegalStateException("synthetic failure")).when(player).prepare();
+    transition.replace(source, result);
+    verify(result).error(eq("transition_failed"), anyString(), isNull());
+    assertFalse(transition.pending());
+    verify(player, never()).release();
+    verify(player, never()).clearVideoSurface();
+  }
+
+  @Test
+  public void playerErrorAndDisposeClearTimersAndReplyOnce() {
+    transition.replace(source, result);
+    listener().onPlayerError(time(item), new PlaybackException("synthetic", null, 1000));
+    verify(result).error(eq("transition_failed"), anyString(), isNull());
+    ShadowLooper.idleMainLooper(8, TimeUnit.SECONDS);
+    transition.dispose();
+    verifyNoMoreInteractions(result);
   }
 }

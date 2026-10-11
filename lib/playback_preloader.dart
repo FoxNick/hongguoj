@@ -12,11 +12,17 @@ class _PreloadRequest {
 }
 
 class PlaybackPreloader extends ChangeNotifier {
-  PlaybackPreloader(this.repository, {DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+  PlaybackPreloader(
+    this.repository, {
+    DateTime Function()? now,
+    this.onPrepared,
+    this.onRelease,
+  }) : _now = now ?? DateTime.now;
 
   final AppRepository repository;
   final DateTime Function() _now;
+  final void Function(PlaybackPlan)? onPrepared;
+  final Future<void> Function(PlaybackPlan)? onRelease;
   PlaybackPlan? _ready;
   _PreloadRequest? _pending;
   String? _identity;
@@ -26,8 +32,22 @@ class PlaybackPreloader extends ChangeNotifier {
   int _generation = 0;
   bool _closed = false, loading = false;
   String error = '';
-  void _release(PlaybackPlan plan) =>
-      unawaited(repository.release(plan.session).catchError((Object _) {}));
+  void _release(PlaybackPlan plan) => unawaited(_releasePlan(plan));
+
+  Future<void> _releasePlan(PlaybackPlan plan) async {
+    try {
+      await onRelease?.call(plan);
+    } catch (_) {}
+    try {
+      await repository.release(plan.session);
+    } catch (_) {}
+  }
+
+  void _prepareMedia(PlaybackPlan plan) {
+    if (plan.local || plan.startupReady || plan.preloadComplete) {
+      onPrepared?.call(plan);
+    }
+  }
 
   String get status {
     final plan = _ready;
@@ -72,10 +92,11 @@ class PlaybackPreloader extends ChangeNotifier {
       _delay!.cancel();
       _delay = null;
     }
-    if (_ready != null ||
-        loading ||
-        _delay != null ||
-        _now().isBefore(_retryAt)) {
+    if (_ready != null) {
+      _prepareMedia(_ready!);
+      return;
+    }
+    if (loading || _delay != null || _now().isBefore(_retryAt)) {
       return;
     }
     final ticket = _generation;
@@ -89,7 +110,7 @@ class PlaybackPreloader extends ChangeNotifier {
         notifyListeners();
         final clock = Stopwatch()..start();
         DiaryService.add(
-          '[Preload] episode=${episode.number}, trigger=${immediate ? 'buffer-complete' : 'stable-playback'}',
+          '[Preload] episode=${episode.number}, trigger=${immediate ? 'ready-to-prefetch' : 'stable-playback'}',
         );
         try {
           final plan = await repository.preload(
@@ -99,7 +120,7 @@ class PlaybackPreloader extends ChangeNotifier {
             online: online,
           );
           if (!pending.claimed && (_closed || ticket != _generation)) {
-            if (plan != null) await repository.release(plan.session);
+            if (plan != null) await _releasePlan(plan);
             return;
           }
           if (plan == null || plan.url.isEmpty) {
@@ -132,6 +153,7 @@ class PlaybackPreloader extends ChangeNotifier {
             return;
           }
           _ready = plan;
+          _prepareMedia(plan);
           _expires = expires;
           error = '';
           DiaryService.add(
@@ -176,7 +198,10 @@ class PlaybackPreloader extends ChangeNotifier {
     int ticket,
   ) {
     _poll?.cancel();
-    _poll = Timer(const Duration(seconds: 1), () async {
+    final delay = _ready?.startupReady == true
+        ? const Duration(seconds: 1)
+        : const Duration(milliseconds: 250);
+    _poll = Timer(delay, () async {
       final current = _ready;
       if (_closed || ticket != _generation || current == null) return;
       try {
@@ -187,6 +212,7 @@ class PlaybackPreloader extends ChangeNotifier {
           throw AppFailure('下一集缓冲会话不匹配');
         }
         _ready = updated;
+        _prepareMedia(updated);
         error = updated.preloadError;
         if (updated.preloadComplete) {
           DiaryService.add(

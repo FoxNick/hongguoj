@@ -218,31 +218,6 @@ func (stream *nativeStreamServer) nativeServePrefix(ctx context.Context, writer 
 	if value := request.Header.Get("If-Range"); value != "" && value != validator {
 		return false
 	}
-	var response *http.Response
-	if end >= int64(len(asset.data)) && request.Method != http.MethodHead {
-		upstream, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.address, nil)
-		if err != nil || validator == "" {
-			return false
-		}
-		upstream.Header.Set("Referer", session.referer)
-		upstream.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", len(asset.data), end))
-		upstream.Header.Set("If-Range", validator)
-		response, err = stream.nativeRequest(upstream)
-		if err != nil {
-			return false
-		}
-		defer response.Body.Close()
-		a, b, total, valid := nativeContentRange(response.Header.Get("Content-Range"))
-		if response.StatusCode != http.StatusPartialContent || !valid || a != int64(len(asset.data)) || b != end || total != asset.total {
-			session.invalidate(asset.address)
-			return false
-		}
-		if validator == asset.etag && response.Header.Get("ETag") != validator ||
-			validator == asset.modified && response.Header.Get("Last-Modified") != validator {
-			session.invalidate(asset.address)
-			return false
-		}
-	}
 	writer.Header().Set("Content-Type", asset.contentType)
 	writer.Header().Set("Accept-Ranges", "bytes")
 	writer.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
@@ -260,18 +235,48 @@ func (stream *nativeStreamServer) nativeServePrefix(ctx context.Context, writer 
 		return true
 	}
 	_, err := writer.Write(asset.data[start:min(end+1, int64(len(asset.data)))])
-	if err == nil && response != nil {
-		_, _ = io.CopyN(writer, response.Body, end-int64(len(asset.data))+1)
+	if err != nil || end < int64(len(asset.data)) || request.Method == http.MethodHead {
+		return true
 	}
+	_ = http.NewResponseController(writer).Flush()
+	upstream, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.address, nil)
+	if err != nil || validator == "" {
+		return true
+	}
+	upstream.Header.Set("Referer", session.referer)
+	upstream.Header.Set("Accept-Encoding", "identity")
+	upstream.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", len(asset.data), end))
+	upstream.Header.Set("If-Range", validator)
+	response, err := stream.nativeRequest(upstream)
+	if err != nil {
+		return true
+	}
+	defer response.Body.Close()
+	a, b, total, valid := nativeContentRange(response.Header.Get("Content-Range"))
+	if response.StatusCode != http.StatusPartialContent || !valid || a != int64(len(asset.data)) || b != end || total != asset.total ||
+		validator == asset.etag && response.Header.Get("ETag") != validator ||
+		validator == asset.modified && response.Header.Get("Last-Modified") != validator {
+		session.invalidate(asset.address)
+		return true
+	}
+	_, _ = io.CopyN(writer, response.Body, end-int64(len(asset.data))+1)
 	return true
 }
 
 func (session *nativeStreamSession) invalidate(address string) {
 	session.mu.Lock()
 	defer session.mu.Unlock()
+	if cached, exists := session.startup[address]; exists {
+		session.startupBytes -= int64(len(cached.data))
+		delete(session.startup, address)
+	}
+	if session.onlineAssets == nil {
+		session.onlineAssets = map[string]bool{}
+	}
+	session.onlineAssets[address] = true
 	for id, asset := range session.assets {
 		if asset.address == address {
-			asset.data, asset.total, asset.etag, asset.modified = nil, 0, "", ""
+			asset.data, asset.invalid = nil, true
 			session.assets[id] = asset
 		}
 	}

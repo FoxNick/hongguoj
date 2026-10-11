@@ -35,8 +35,12 @@ func (source *cencSource) open(offset, length int64) (io.ReadCloser, error) {
 	if err := source.ctx.Err(); err != nil {
 		return nil, err
 	}
-	if filepath.IsAbs(source.asset.address) {
-		file, err := os.Open(source.asset.address)
+	local := source.asset.file
+	if local == "" && filepath.IsAbs(source.asset.address) {
+		local = source.asset.address
+	}
+	if local != "" {
+		file, err := os.Open(local)
 		if err != nil {
 			return nil, err
 		}

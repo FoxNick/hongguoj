@@ -296,6 +296,8 @@ class PlaybackPlan {
     this.preloadProgress = 0,
     this.preloadState = '',
     this.preloadError = '',
+    this.mediaType = '',
+    this.startupReady = false,
     this.expiresAt = 0,
     this.routeIndex = 0,
     this.routeCount = 1,
@@ -314,6 +316,8 @@ class PlaybackPlan {
   final double preloadProgress;
   final String preloadState;
   final String preloadError;
+  final String mediaType;
+  final bool startupReady;
   final int expiresAt;
   final int routeIndex;
   final int routeCount;
@@ -337,6 +341,8 @@ class PlaybackPlan {
     preloadProgress: (json['preloadProgress'] as num?)?.toDouble() ?? 0,
     preloadState: json['preloadState'] as String? ?? '',
     preloadError: json['preloadError'] as String? ?? '',
+    mediaType: json['mediaType'] as String? ?? '',
+    startupReady: json['startupReady'] == true,
     expiresAt: intValue(json['expiresAt']),
     routeIndex: intValue(json['routeIndex']),
     routeCount: intValue(json['routeCount']) > 0

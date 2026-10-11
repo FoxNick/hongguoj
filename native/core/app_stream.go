@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -21,26 +22,32 @@ import (
 
 type nativeStreamAsset struct {
 	address     string
+	base        string
+	file        string
 	data        []byte
 	contentType string
 	total       int64
 	etag        string
 	modified    string
+	invalid     bool
 }
 
 type nativeStreamSession struct {
-	preload     *nativeEpisodeCache
-	cencMu      sync.Mutex
-	cenc        *cencIndex
-	cencKey     []byte
-	credentials *providerMediaCredentials
-	mu          sync.Mutex
-	assets      map[string]nativeStreamAsset
-	referer     string
-	key         []byte
-	ctx         context.Context
-	cancel      context.CancelFunc
-	lastUsed    time.Time
+	preload      *nativeEpisodeCache
+	startup      map[string]nativeStreamAsset
+	startupBytes int64
+	onlineAssets map[string]bool
+	cencMu       sync.Mutex
+	cenc         *cencIndex
+	cencKey      []byte
+	credentials  *providerMediaCredentials
+	mu           sync.Mutex
+	assets       map[string]nativeStreamAsset
+	referer      string
+	key          []byte
+	ctx          context.Context
+	cancel       context.CancelFunc
+	lastUsed     time.Time
 }
 
 type nativeStreamServer struct {
@@ -141,7 +148,13 @@ func (stream *nativeStreamServer) nativeAsset(token string, session *nativeStrea
 	}
 	id := hex.EncodeToString(digest[:12]) + extension
 	session.mu.Lock()
-	if previous, found := session.assets[id]; !found || len(previous.data) == 0 || len(asset.data) > 0 {
+	if cached, found := session.startup[asset.address]; found {
+		if cached.contentType == "" {
+			cached.contentType = asset.contentType
+		}
+		asset = cached
+	}
+	if previous, found := session.assets[id]; !found || !previous.invalid && (len(previous.data) == 0 || len(asset.data) > 0) {
 		session.assets[id] = asset
 	}
 	session.mu.Unlock()
@@ -247,7 +260,17 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	session.mu.Lock()
 	asset, found := session.assets[parts[1]]
+	if _, shared := session.startup[asset.address]; found && !shared {
+		if session.onlineAssets == nil {
+			session.onlineAssets = map[string]bool{}
+		}
+		session.onlineAssets[asset.address] = true
+	}
 	session.mu.Unlock()
+	if asset.invalid {
+		http.Error(writer, "媒体在播放期间发生变化，请重新解析", http.StatusConflict)
+		return
+	}
 	if !found {
 		http.NotFound(writer, request)
 		return
@@ -261,6 +284,27 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		stream.nativeServeCENC(writer, request, session, asset, ctx)
 		return
 	}
+	if asset.file != "" {
+		file, err := os.Open(asset.file)
+		if err != nil {
+			http.Error(writer, "整集缓冲文件已丢失", http.StatusGone)
+			return
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil || !info.Mode().IsRegular() || info.Size() != asset.total {
+			http.Error(writer, "整集缓冲文件不完整", http.StatusGone)
+			return
+		}
+		if asset.contentType != "" {
+			writer.Header().Set("Content-Type", asset.contentType)
+		}
+		if asset.etag != "" {
+			writer.Header().Set("ETag", asset.etag)
+		}
+		http.ServeContent(writer, request.WithContext(ctx), parts[1], time.Time{}, file)
+		return
+	}
 	if len(asset.data) > 0 && asset.total > int64(len(asset.data)) {
 		if stream.nativeServePrefix(ctx, writer, request, session, asset) {
 			return
@@ -269,7 +313,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	if len(asset.data) > 0 {
 		if strings.Contains(asset.contentType, "mpegurl") {
-			body, err := stream.nativeRewrite(parts[0], session, string(asset.data), asset.address)
+			body, err := stream.nativeRewrite(parts[0], session, string(asset.data), asset.playlistBase())
 			if err != nil {
 				http.Error(writer, err.Error(), http.StatusBadGateway)
 				return
@@ -294,6 +338,13 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	upstream.Header.Set("User-Agent", userAgent)
 	upstream.Header.Set("Referer", session.referer)
+	if asset.total > 0 {
+		if asset.etag != "" && !strings.HasPrefix(asset.etag, "W/") {
+			upstream.Header.Set("If-Match", asset.etag)
+		} else if asset.modified != "" {
+			upstream.Header.Set("If-Unmodified-Since", asset.modified)
+		}
+	}
 	for _, name := range []string{"Range", "If-Range"} {
 		if value := request.Header.Get(name); value != "" {
 			upstream.Header.Set(name, value)
@@ -310,6 +361,17 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		err := stream.downloader.catalogResponseError(upstream, response, body)
 		http.Error(writer, err.Error(), response.StatusCode)
 		return
+	}
+	if asset.total > 0 {
+		total := response.ContentLength
+		if response.StatusCode == http.StatusPartialContent {
+			_, _, total, _ = nativeContentRange(response.Header.Get("Content-Range"))
+		}
+		if total != asset.total || asset.etag != "" && !strings.HasPrefix(asset.etag, "W/") && response.Header.Get("ETag") != asset.etag || (asset.etag == "" || strings.HasPrefix(asset.etag, "W/")) && asset.modified != "" && response.Header.Get("Last-Modified") != asset.modified {
+			session.invalidate(asset.address)
+			http.Error(writer, "媒体在播放期间发生变化，请重新解析", http.StatusConflict)
+			return
+		}
 	}
 	contentType := strings.ToLower(response.Header.Get("Content-Type"))
 	finalURL := upstream.URL

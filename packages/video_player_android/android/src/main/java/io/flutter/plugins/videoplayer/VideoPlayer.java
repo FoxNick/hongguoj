@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
@@ -31,6 +32,7 @@ import java.util.List;
  *
  * <p>It provides methods to control playback, adjust volume, and handle seeking.
  */
+@OptIn(markerClass = UnstableApi.class)
 public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @NonNull protected final VideoPlayerCallbacks videoPlayerEvents;
   @Nullable protected final SurfaceProducer surfaceProducer;
@@ -39,6 +41,9 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @NonNull protected ExoPlayer exoPlayer;
   @NonNull private final PlaybackDiagnostics playbackDiagnostics;
   @NonNull private final PlaybackTransition playbackTransition;
+  @Nullable private final PreparedNext preparedNext;
+  @NonNull private final FrameCapture frameCapture = new FrameCapture();
+  private long mediaGeneration;
   // TODO: Migrate to stable API, see https://github.com/flutter/flutter/issues/147039.
   @UnstableApi @Nullable protected DefaultTrackSelector trackSelector;
 
@@ -77,6 +82,8 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     this.videoPlayerEvents = events;
     this.surfaceProducer = surfaceProducer;
     exoPlayer = exoPlayerProvider.get();
+    preparedNext = exoPlayerProvider instanceof PreparedPlayerProvider
+        ? ((PreparedPlayerProvider) exoPlayerProvider).preparedNext : null;
     playbackTransition = new PlaybackTransition(exoPlayer);
     playbackDiagnostics = new PlaybackDiagnostics(
         exoPlayer, surfaceProducer == null ? "surface-hybrid" : "flutter-texture");
@@ -94,15 +101,72 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   }
 
   @UnstableApi
+  @NonNull
   public java.util.Map<String, Object> playbackSnapshot() {
-    return playbackDiagnostics.snapshot();
+    java.util.Map<String, Object> values = playbackDiagnostics.snapshot();
+    values.putAll(playbackTransition.snapshot());
+    if (preparedNext != null) values.putAll(preparedNext.snapshot());
+    return values;
   }
 
   @UnstableApi
-  public void transitionTo(android.content.Context context, VideoAsset asset,
+  @NonNull
+  public static ExoPlayerProvider createPlayerProvider(@NonNull android.content.Context context,
+      @NonNull VideoAsset asset, @NonNull VideoPlayerOptions options) {
+    return new PreparedPlayerProvider(context, asset, options);
+  }
+
+  @UnstableApi
+  void prepareNext(android.content.Context context, PreparedMediaRequest request,
       io.flutter.plugin.common.MethodChannel.Result result) {
-    playbackTransition.replace(
-        asset.getMediaSourceFactory(context).createMediaSource(asset.getMediaItem()), result);
+    if (preparedNext == null) {
+      result.error("prepare_unavailable", "播放器不支持预准备", null);
+      return;
+    }
+    long generation = PreparedMediaRequest.nextGeneration();
+    preparedNext.prepare(request, request.createSource(context, generation), generation, result);
+  }
+
+  @UnstableApi
+  boolean clearNext(String identity) {
+    return preparedNext != null && preparedNext.clear(identity);
+  }
+
+  @UnstableApi
+  void transitionTo(android.content.Context context, PreparedMediaRequest request,
+      long requestElapsedMs, io.flutter.plugin.common.MethodChannel.Result result) {
+    mediaGeneration++;
+    PreparedNext.Selection prepared = preparedNext == null ? null : preparedNext.take(request);
+    playbackTransition.replace(prepared == null
+        ? request.createSource(context, PreparedMediaRequest.nextGeneration()) : prepared.source,
+        prepared, requestElapsedMs, result);
+  }
+
+  void captureFrame(io.flutter.plugin.common.MethodChannel.Result result) {
+    if (isDisposed || surfaceProducer == null || playbackTransition.pending()
+        || exoPlayer.getPlaybackState() != androidx.media3.common.Player.STATE_READY) {
+      result.success(null);
+      return;
+    }
+    long generation = mediaGeneration;
+    MediaItem item = exoPlayer.getCurrentMediaItem();
+    if (!playbackDiagnostics.hasFrameFor(item)) {
+      result.success(null);
+      return;
+    }
+    androidx.media3.common.VideoSize size = exoPlayer.getVideoSize();
+    if (!canCaptureFrame(size, exoPlayer.getVideoFormat())) {
+      result.success(null);
+      return;
+    }
+    frameCapture.capture(surfaceProducer.getSurface(), size.width, size.height,
+        () -> !isDisposed && generation == mediaGeneration
+            && java.util.Objects.equals(item, exoPlayer.getCurrentMediaItem()), result);
+  }
+
+  static boolean canCaptureFrame(androidx.media3.common.VideoSize size, Format format) {
+    return size.width > 0 && size.height > 0 && size.pixelWidthHeightRatio == 1.0f
+        && format != null && format.rotationDegrees == 0;
   }
 
   public void setDisposeHandler(@Nullable DisposeHandler handler) {
@@ -148,7 +212,6 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
 
   @Override
   public void pause() {
-    if (playbackTransition.pending()) return;
     exoPlayer.pause();
   }
 
@@ -469,7 +532,11 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   }
 
   public void dispose() {
+    if (isDisposed) return;
+    mediaGeneration++;
+    frameCapture.dispose();
     playbackTransition.dispose();
+    if (preparedNext != null) preparedNext.dispose();
     isDisposed = true;
     mainHandler.removeCallbacksAndMessages(null);
     if (disposeHandler != null) {

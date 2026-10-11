@@ -133,6 +133,8 @@ type nativeCatalogResult struct {
 }
 
 type nativePlan struct {
+	MediaType       string            `json:"mediaType,omitempty"`
+	StartupReady    bool              `json:"startupReady,omitempty"`
 	PreloadComplete bool              `json:"preloadComplete,omitempty"`
 	PreloadTotal    int64             `json:"preloadTotal,omitempty"`
 	PreloadProgress float64           `json:"preloadProgress,omitempty"`

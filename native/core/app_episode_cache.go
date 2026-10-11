@@ -17,16 +17,24 @@ import (
 )
 
 type nativeEpisodeCache struct {
-	mu        sync.Mutex
-	plan      nativePlan
-	manager   *nativeDownloads
-	job       nativeDownloadJob
-	entryID   string
-	entry     string
-	directory string
-	files     map[string]int64
-	decoder   *nativeStreamSession
-	online    bool
+	mu              sync.Mutex
+	plan            nativePlan
+	manager         *nativeDownloads
+	job             nativeDownloadJob
+	entryID         string
+	entry           string
+	directory       string
+	files           map[string]int64
+	decoder         *nativeStreamSession
+	online          bool
+	session         *nativeStreamSession
+	stream          *nativeStreamServer
+	mediaURL        string
+	startupHLS      bool
+	startupRequired map[string]bool
+	startupTargets  map[string]bool
+	startupIndex    bool
+	startupWorkers  sync.WaitGroup
 }
 
 func (engine *nativeEngine) startEpisodeCache(input nativeInput, plan nativePlan, choice nativePlaybackChoice, stream *nativeStreamServer) error {
@@ -43,7 +51,7 @@ func (engine *nativeEngine) startEpisodeCache(input nativeInput, plan nativePlan
 	job := nativeDownloadJob{ID: "next", Drama: input.Drama, Chapter: input.Chapter, Index: input.Index, Quality: input.Quality, State: "downloading"}
 	manager := &nativeDownloads{root: root, engine: engine, jobs: map[string]*nativeDownloadRecord{job.ID: {nativeDownloadJob: job}}}
 	parsed, _ := url.Parse(plan.URL)
-	cache := &nativeEpisodeCache{plan: plan, manager: manager, job: job, entryID: filepath.Base(parsed.Path), directory: manager.jobDirectory(job)}
+	cache := &nativeEpisodeCache{plan: plan, manager: manager, job: job, entryID: filepath.Base(parsed.Path), directory: manager.jobDirectory(job), session: session, stream: stream, mediaURL: choice.media[choice.index].URL}
 	cache.plan.PreloadState = "caching"
 	session.mu.Lock()
 	session.preload = cache
@@ -52,6 +60,7 @@ func (engine *nativeEngine) startEpisodeCache(input nativeInput, plan nativePlan
 		defer os.RemoveAll(root)
 		cache.run(session.ctx, input, choice.media[choice.index], stream)
 		<-session.ctx.Done()
+		cache.startupWorkers.Wait()
 	}()
 	return nil
 }
@@ -95,6 +104,7 @@ func (engine *nativeEngine) nativePreloadStatus(id string) (nativePlan, error) {
 func (cache *nativeEpisodeCache) run(ctx context.Context, input nativeInput, media providerMedia, stream *nativeStreamServer) {
 	ctx = context.WithValue(ctx, backgroundCatalogKey{}, true)
 	ctx = context.WithValue(ctx, nativePreloadKey{}, true)
+	ctx = context.WithValue(ctx, nativeStartupCacheKey{}, cache)
 	forceHLS := false
 	for attempt := 0; ctx.Err() == nil; attempt++ {
 		cache.mu.Lock()
@@ -175,6 +185,7 @@ func (cache *nativeEpisodeCache) verify(ctx context.Context, result nativeDownlo
 		return err
 	}
 	files := map[string]int64{}
+	resources := map[string]nativeDownloadFileState{}
 	var total int64
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
@@ -197,6 +208,7 @@ func (cache *nativeEpisodeCache) verify(ctx context.Context, result nativeDownlo
 			if json.Unmarshal(metadata, &state) != nil || !state.Complete || state.Total != info.Size() {
 				return errNativeLocalFile
 			}
+			resources[name] = state
 		} else if !os.IsNotExist(readErr) || name == "media.mp4" {
 			return errNativeLocalFile
 		}
@@ -217,9 +229,14 @@ func (cache *nativeEpisodeCache) verify(ctx context.Context, result nativeDownlo
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	cache.publishCompletedResources(resources)
 	cache.mu.Lock()
 	cache.entry, cache.files, cache.decoder = result.file, files, decoder
 	cache.plan.PreloadComplete = true
+	cache.plan.StartupReady = true
+	if strings.HasSuffix(result.file, ".m3u8") {
+		cache.plan.MediaType = "hls"
+	}
 	cache.plan.PreloadProgress = 1
 	cache.plan.PrefetchedBytes, cache.plan.PreloadTotal = total, total
 	cache.plan.PreloadState, cache.plan.PreloadError = "complete", ""

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -107,6 +108,7 @@ class LunaExoPlayer implements Player {
     this.textureOutput,
     this.initializationTimeout = const Duration(seconds: 20),
     this.transitionTimeout = const Duration(seconds: 10),
+    this.preparationRetryDelay = const Duration(seconds: 3),
   }) {
     state = const PlayerState().copyWith(volume: 100.0);
   }
@@ -116,6 +118,7 @@ class LunaExoPlayer implements Player {
   final bool Function()? textureOutput;
   final Duration initializationTimeout;
   final Duration transitionTimeout;
+  final Duration preparationRetryDelay;
   String? _lastControllerError;
   static const diagnosticChannel = MethodChannel('hongguo/video_diagnostics');
   VoidCallback? _valueListener;
@@ -140,6 +143,15 @@ class LunaExoPlayer implements Player {
   bool _disposed = false;
   bool _transitioning = false;
   bool _transitionWantsPlay = false;
+  int _prepareGeneration = 0;
+  String? _preparedIdentity;
+  String? _preparedUrl;
+  String? _preparedMediaType;
+  Map<String, String>? _preparedHeaders;
+  Future<void>? _preparingNext;
+  DateTime _prepareRetryAt = DateTime(2000);
+  bool lastTransitionUsedPrepared = false;
+  bool lastTransitionFirstFrame = false;
 
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
@@ -172,17 +184,133 @@ class LunaExoPlayer implements Player {
                 : VideoViewType.textureView);
   }
 
+  Map<String, String> _headers(Media media) {
+    final headers = Map<String, String>.from(media.httpHeaders ?? const {});
+    if (!headers.keys.any((key) => key.toLowerCase() == 'user-agent')) {
+      headers['User-Agent'] =
+          'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+    }
+    return headers;
+  }
+
+  Future<Uint8List?> captureFrame() async {
+    final c = _controller;
+    if (!canTransition ||
+        c == null ||
+        television?.call() == true ||
+        c.value.rotationCorrection != 0) {
+      return null;
+    }
+    final generation = _openGeneration;
+    try {
+      final bytes = await diagnosticChannel
+          .invokeMethod<Uint8List>('captureFrame', {'playerId': c.playerId})
+          .timeout(const Duration(milliseconds: 180), onTimeout: () => null);
+      if (_disposed ||
+          generation != _openGeneration ||
+          _controller != c ||
+          bytes == null ||
+          bytes.lengthInBytes > 4 * 1024 * 1024) {
+        return null;
+      }
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> prepareNext(
+    Media media, {
+    required String identity,
+    String mediaType = '',
+  }) {
+    if (!canTransition || identity.isEmpty) return Future<void>.value();
+    final headers = _headers(media);
+    if (_preparedIdentity == identity &&
+        _preparedUrl == media.uri &&
+        _preparedMediaType == mediaType &&
+        mapEquals(_preparedHeaders, headers)) {
+      return _preparingNext ?? Future<void>.value();
+    }
+    if (DateTime.now().isBefore(_prepareRetryAt)) return Future<void>.value();
+    final c = _controller!;
+    final ticket = ++_prepareGeneration;
+    _preparedIdentity = identity;
+    _preparedUrl = media.uri;
+    _preparedMediaType = mediaType;
+    _preparedHeaders = headers;
+    final operation = () async {
+      try {
+        final result = await diagnosticChannel
+            .invokeMapMethod<String, dynamic>('prepareNext', {
+              'playerId': c.playerId,
+              'identity': identity,
+              'url': media.uri,
+              'headers': headers,
+              'mediaType': mediaType,
+            })
+            .timeout(const Duration(seconds: 12));
+        if (_disposed || ticket != _prepareGeneration || _controller != c) {
+          return;
+        }
+        if (result?['prepared'] != true) throw StateError('下一集样本尚未准备好');
+        DiaryService.add(
+          '[PrepareNext] ready identity=$identity, elapsedMs=${result?['elapsedMs']}',
+        );
+      } catch (error) {
+        if (_disposed || ticket != _prepareGeneration || _controller != c) {
+          return;
+        }
+        await clearPreparedNext(identity: identity);
+        _prepareRetryAt = DateTime.now().add(preparationRetryDelay);
+        DiaryService.add(
+          '[PrepareNext] background preparation unavailable: $error',
+        );
+      }
+    }();
+    _preparingNext = operation;
+    return operation;
+  }
+
+  Future<void> clearPreparedNext({String? identity}) async {
+    if (identity != null && _preparedIdentity != identity) return;
+    ++_prepareGeneration;
+    _preparedIdentity = _preparedUrl = _preparedMediaType = null;
+    _preparedHeaders = null;
+    _preparingNext = null;
+    _prepareRetryAt = DateTime(2000);
+    final c = _controller;
+    if (_disposed || c == null) return;
+    try {
+      await diagnosticChannel
+          .invokeMethod<void>('clearNext', {
+            'playerId': c.playerId,
+            'identity': identity,
+          })
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {}
+  }
+
   Future<void> transitionTo(
     Media media, {
     bool play = true,
     bool reopenOnFailure = true,
+    String identity = '',
+    String mediaType = '',
+    int requestElapsedMs = 0,
   }) async {
-    if (!canTransition) return open(media, play: play);
+    if (!canTransition) return open(media, play: play, mediaType: mediaType);
     final c = _controller!;
     final ticket = ++_openGeneration;
     final clock = Stopwatch()..start();
     _transitioning = true;
     _transitionWantsPlay = play;
+    ++_prepareGeneration;
+    _preparedIdentity = _preparedUrl = _preparedMediaType = null;
+    _preparedHeaders = null;
+    _preparingNext = null;
+    _prepareRetryAt = DateTime(2000);
+    lastTransitionUsedPrepared = lastTransitionFirstFrame = false;
     _positionPollTimer?.cancel();
     _stopDiagnostics();
     final headers = Map<String, String>.from(media.httpHeaders ?? const {});
@@ -197,10 +325,15 @@ class LunaExoPlayer implements Player {
             'playerId': c.playerId,
             'url': media.uri,
             'headers': headers,
+            'identity': identity,
+            'mediaType': mediaType,
+            'requestElapsedMs': requestElapsedMs,
           })
           .timeout(transitionTimeout);
       if (_disposed || ticket != _openGeneration || _controller != c) return;
       if (result == null) throw StateError('切集未返回首帧结果');
+      lastTransitionUsedPrepared = result['usedPrepared'] == true;
+      lastTransitionFirstFrame = result['firstFrame'] == true;
       final duration = Duration(
         milliseconds: (result['durationMs'] as num).toInt(),
       );
@@ -253,7 +386,7 @@ class LunaExoPlayer implements Player {
       _onControllerValue(c);
       revision.value++;
       DiaryService.add(
-        '[Transition] reused player=${c.playerId}, readyMs=${clock.elapsedMilliseconds}, firstFrame=${result['firstFrame']}, nativeMs=${result['elapsedMs']}',
+        '[Transition] reused player=${c.playerId}, readyMs=${clock.elapsedMilliseconds}, firstFrame=${result['firstFrame']}, nativeMs=${result['elapsedMs']}, usedPrepared=${result['usedPrepared']}, preloadReady=${result['preloadReady']}',
       );
     } catch (error) {
       if (_disposed || ticket != _openGeneration) return;
@@ -263,15 +396,19 @@ class LunaExoPlayer implements Player {
         rethrow;
       }
       DiaryService.add('[Transition] 复用失败，重新初始化: $error');
-      await open(media, play: _transitionWantsPlay);
+      await open(media, play: _transitionWantsPlay, mediaType: mediaType);
     } finally {
       if (ticket == _openGeneration) _transitioning = false;
     }
   }
 
   @override
-  Future<void> open(Playable playable, {bool play = true}) async {
-    final pending = _openMedia(playable, play: play);
+  Future<void> open(
+    Playable playable, {
+    bool play = true,
+    String mediaType = '',
+  }) async {
+    final pending = _openMedia(playable, play: play, mediaType: mediaType);
     final ticket = _openGeneration;
     await pending.timeout(
       const Duration(seconds: 45),
@@ -285,7 +422,11 @@ class LunaExoPlayer implements Player {
     );
   }
 
-  Future<void> _openMedia(Playable playable, {bool play = true}) async {
+  Future<void> _openMedia(
+    Playable playable, {
+    bool play = true,
+    String mediaType = '',
+  }) async {
     if (_disposed) return;
     if (playable is! Media) return;
 
@@ -326,10 +467,15 @@ class LunaExoPlayer implements Player {
     if (uri == null && !url.startsWith('/')) {
       throw Exception('无效的播放地址');
     }
-    bool isHls = uri?.path.toLowerCase().endsWith('.m3u8') ?? false;
-    bool formatKnown = isHls;
+    bool isHls =
+        mediaType == 'hls' ||
+        mediaType.isEmpty &&
+            (uri?.path.toLowerCase().endsWith('.m3u8') ?? false);
+    bool formatKnown = isHls || mediaType == 'mp4';
     String? preparationError;
-    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+    if (mediaType.isEmpty &&
+        uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https')) {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 5);
       try {
@@ -748,6 +894,11 @@ class LunaExoPlayer implements Player {
   }
 
   Future<void> _releaseController() async {
+    ++_prepareGeneration;
+    _preparedIdentity = _preparedUrl = _preparedMediaType = null;
+    _preparedHeaders = null;
+    _preparingNext = null;
+    _prepareRetryAt = DateTime(2000);
     _transitioning = false;
     _positionPollTimer?.cancel();
     _stopDiagnostics();

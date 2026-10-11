@@ -101,7 +101,7 @@ func nativeDownloadAssetName(address, extension string) string {
 
 func (manager *nativeDownloads) downloadBundle(ctx context.Context, media providerMedia, quality int) (nativeDownloadBundle, error) {
 	ctx = providerMediaContext(ctx, media.credentials)
-	bundle := nativeDownloadBundle{quality: media.Quality, playlists: map[string][]byte{}}
+	bundle := nativeDownloadBundle{quality: media.Quality, playlists: map[string][]byte{}, startup: map[string]bool{}}
 	visited := map[string]string{}
 	pending := map[string]bool{}
 	assets := map[string]bool{}
@@ -144,6 +144,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 		if err != nil {
 			return "", errors.New("播放列表地址无效")
 		}
+		firstSegment := true
 		rewrite := func(reference string, playlist, key bool) (string, error) {
 			relative, err := url.Parse(reference)
 			if err != nil {
@@ -152,6 +153,9 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 			resolved := parsed.ResolveReference(relative).String()
 			if playlist {
 				return walk(resolved, "", nativeDownloadAssetName(resolved, ".m3u8"), depth+1)
+			}
+			if firstSegment && !strings.HasPrefix(resolved, "data:") {
+				bundle.startup[resolved] = true
 			}
 			var data []byte
 			if key && len(media.HLSKey) == 16 {
@@ -212,6 +216,9 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 			}
 			if text != "" && !strings.HasPrefix(text, "#") {
 				line, err = rewrite(text, nextPlaylist, false)
+				if !nextPlaylist {
+					firstSegment = false
+				}
 				nextPlaylist = false
 				if err != nil {
 					return "", err
@@ -231,6 +238,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 			}
 			output = append(output, line)
 		}
+		bundle.sources = append(bundle.sources, nativeStartupPlaylist{address: address, base: base, data: []byte(strings.Join(lines, "\n"))})
 		bundle.playlists[name] = []byte(strings.Join(output, "\n") + "\n")
 		visited[address] = name
 		return name, nil

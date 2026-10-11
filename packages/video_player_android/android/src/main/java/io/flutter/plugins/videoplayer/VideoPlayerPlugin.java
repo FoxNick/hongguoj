@@ -68,35 +68,60 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
   private void attachDiagnostics(BinaryMessenger messenger) {
     diagnosticChannel = new MethodChannel(messenger, "hongguo/video_diagnostics");
     diagnosticChannel.setMethodCallHandler((call, result) -> {
-      if (!call.method.equals("snapshot") && !call.method.equals("transition")) {
+      if (!call.method.equals("snapshot") && !call.method.equals("transition")
+          && !call.method.equals("prepareNext") && !call.method.equals("clearNext")
+          && !call.method.equals("captureFrame")) {
         result.notImplemented();
         return;
       }
       Number id = call.argument("playerId");
       VideoPlayer player = id == null ? null : videoPlayers.get(id.longValue());
       if (player == null) {
+        if (call.method.equals("captureFrame")) {
+          result.success(null);
+          return;
+        }
         result.error("player_unavailable", "播放器已释放", null);
         return;
       }
-      if (call.method.equals("transition")) {
-        String url = call.argument("url");
-        java.util.Map<String, String> headers = call.argument("headers");
-        if (url == null || url.isEmpty()) {
-          result.error("invalid_media", "播放地址为空", null);
+      if (call.method.equals("captureFrame")) {
+        int mode = flutterState.applicationContext.getResources().getConfiguration().uiMode;
+        if ((mode & android.content.res.Configuration.UI_MODE_TYPE_MASK)
+            == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
+          result.success(null);
           return;
         }
-        VideoAsset.StreamingFormat format = android.net.Uri.parse(url).getPath() != null &&
-            android.net.Uri.parse(url).getPath().toLowerCase(java.util.Locale.ROOT).endsWith(".m3u8")
-            ? VideoAsset.StreamingFormat.HTTP_LIVE : VideoAsset.StreamingFormat.UNKNOWN;
-        try {
-          player.transitionTo(flutterState.applicationContext,
-              VideoAsset.fromRemoteUrl(url, format,
-                  headers == null ? java.util.Collections.emptyMap() : headers, null), result);
-        } catch (RuntimeException error) {
-          result.error("transition_failed", error.toString(), null);
-        }
-      } else {
+        player.captureFrame(result);
+        return;
+      }
+      if (call.method.equals("snapshot")) {
         result.success(player.playbackSnapshot());
+        return;
+      }
+      if (call.method.equals("clearNext")) {
+        result.success(player.clearNext(call.argument("identity")));
+        return;
+      }
+      String url = call.argument("url");
+      if (url == null || url.isEmpty()) {
+        result.error("invalid_media", "播放地址为空", null);
+        return;
+      }
+      String mediaType = call.argument("mediaType");
+      if (mediaType == null) mediaType = call.argument("mimeType");
+      try {
+        PreparedMediaRequest request = new PreparedMediaRequest(
+            call.argument("identity"), url, call.argument("headers"), mediaType);
+        if (call.method.equals("prepareNext")) {
+          player.prepareNext(flutterState.applicationContext, request, result);
+        } else {
+          Number elapsed = call.argument("requestElapsedMs");
+          player.transitionTo(flutterState.applicationContext, request,
+              elapsed == null ? 0L : elapsed.longValue(), result);
+        }
+      } catch (RuntimeException error) {
+        result.error(call.method.equals("prepareNext") ? "prepare_failed" : "transition_failed",
+            error.toString(), null);
       }
     });
   }

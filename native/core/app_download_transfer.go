@@ -28,6 +28,8 @@ type nativeDownloadBundle struct {
 	assets    []nativeDownloadAsset
 	playlists map[string][]byte
 	quality   int
+	startup   map[string]bool
+	sources   []nativeStartupPlaylist
 }
 
 type nativeDownloadFileState struct {
@@ -56,6 +58,9 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 		entry = "index.m3u8"
 	} else {
 		bundle.assets = []nativeDownloadAsset{{address: media.URL, name: entry}}
+	}
+	if cache := nativeStartupCache(ctx); cache != nil {
+		cache.prepareStartup(&bundle, hls)
 	}
 	directory := manager.jobDirectory(job)
 	identity := entry + "\x00" + media.URL + "\x00" + hex.EncodeToString(media.CENCKey) + "\x00" + strconv.Itoa(bundle.quality)
@@ -90,6 +95,11 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 		if asset.data != nil {
 			err = nativeDownloadWrite(target, asset.data)
 			size = int64(len(asset.data))
+			if err == nil {
+				if cache := nativeStartupCache(ctx); cache != nil {
+					cache.publishStartup(nativeStreamAsset{address: asset.address, data: asset.data, total: size, contentType: "application/octet-stream"}, true, asset.key)
+				}
+			}
 		} else {
 			size, err = manager.downloadFile(ctx, asset.address, media.Referer, target, asset.key, func(received, total int64) {
 				progress := 0.0
@@ -155,6 +165,15 @@ func (manager *nativeDownloads) downloadFile(ctx context.Context, address, refer
 	if metadata.Complete {
 		if info, err := os.Stat(target); err == nil && info.Size() == metadata.Total && info.Size() > 0 && (!key || info.Size() == 16) {
 			progress(info.Size(), info.Size())
+			if cache := nativeStartupCache(ctx); cache != nil {
+				header := http.Header{}
+				if strings.HasPrefix(metadata.Validator, "\"") {
+					header.Set("ETag", metadata.Validator)
+				} else {
+					header.Set("Last-Modified", metadata.Validator)
+				}
+				cache.publishStartupFile(address, target, metadata, header, info.Size(), true, key)
+			}
 			return info.Size(), nil
 		}
 	}
@@ -224,7 +243,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 		if !valid || start != offset || (response.ContentLength >= 0 && response.ContentLength != end-start+1) {
 			return 0, false, errors.New("服务器返回的续传范围不正确，已停止下载")
 		}
-		if offset > 0 && ((validator != "" && validator != old.Validator) || (old.Total > 0 && old.Total != full)) {
+		if offset > 0 && (validator != old.Validator || (old.Total > 0 && old.Total != full)) {
 			return 0, true, nil
 		}
 		total = full
@@ -264,6 +283,9 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 			}
 			inactivity.Reset(30 * time.Second)
 			progress(received, total)
+			if cache := nativeStartupCache(ctx); cache != nil {
+				cache.publishStartupFile(address, target+".part", metadata, response.Header, received, false, key)
+			}
 		}
 		if readErr != nil {
 			if readErr != io.EOF {
@@ -298,6 +320,9 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	encoded, _ = json.Marshal(metadata)
 	if err = nativeDownloadWrite(target+".json", encoded); err != nil {
 		return received, false, err
+	}
+	if cache := nativeStartupCache(ctx); cache != nil {
+		cache.publishStartupFile(address, target, metadata, response.Header, received, true, key)
 	}
 	return received, false, nil
 }

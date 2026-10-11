@@ -15,6 +15,7 @@ import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.preload.DefaultPreloadManager;
 import io.flutter.plugins.videoplayer.texture.TextureVideoPlayer;
 import io.flutter.view.TextureRegistry;
 import org.junit.Before;
@@ -208,22 +209,22 @@ public final class TextureVideoPlayerTest {
     VideoPlayerOptions options = new VideoPlayerOptions();
     options.backBufferDurationMs = 20000L;
 
-    try (MockedConstruction<ExoPlayer.Builder> mockedBuilder =
+    try (MockedConstruction<DefaultPreloadManager.Builder> mockedBuilder =
         mockConstruction(
-            ExoPlayer.Builder.class,
+            DefaultPreloadManager.Builder.class,
+            withSettings().defaultAnswer(RETURNS_SELF),
             (mock, context) -> {
-              when(mock.setLoadControl(any())).thenReturn(mock);
-              when(mock.setTrackSelector(any())).thenReturn(mock);
-              when(mock.setMediaSourceFactory(any())).thenReturn(mock);
-              when(mock.build()).thenReturn(mockExoPlayer);
+              when(mock.build()).thenReturn(mock(DefaultPreloadManager.class));
+              when(mock.buildExoPlayer()).thenReturn(mockExoPlayer);
             })) {
 
       TextureVideoPlayer player =
           TextureVideoPlayer.create(mockContext, mockEvents, mockProducer, fakeVideoAsset, options);
 
       assertEquals(1, mockedBuilder.constructed().size());
-      ExoPlayer.Builder builderMock = mockedBuilder.constructed().get(0);
+      DefaultPreloadManager.Builder builderMock = mockedBuilder.constructed().get(0);
       verify(builderMock).setLoadControl(any());
+      verify(builderMock).buildExoPlayer();
       player.dispose();
     }
   }

@@ -28,6 +28,8 @@ class PlayerInteractions extends ChangeNotifier {
     required this.onEpisode,
     this.onSeek,
     this.onEpisodeSwipe,
+    this.canNavigateEpisode,
+    this.captureEpisodeFrame,
   }) {
     _playing = player.stream.playing.listen((playing) {
       if (!playing) cancel();
@@ -50,6 +52,9 @@ class PlayerInteractions extends ChangeNotifier {
   final String Function(int direction) onEpisode;
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function(int)? onEpisodeSwipe;
+  final bool Function(int)? canNavigateEpisode;
+  final Future<Uint8List?> Function()? captureEpisodeFrame;
+  static const episodeTransitionDuration = Duration(milliseconds: 220);
   late final StreamSubscription<bool> _playing;
   Timer? _holdTimer;
   Timer? _hintTimer;
@@ -57,7 +62,8 @@ class PlayerInteractions extends ChangeNotifier {
   final Set<int> _pointers = {};
   int? _pointer;
   Offset? _origin;
-  Offset? _lastPosition;
+  VelocityTracker? _velocityTracker;
+  double _episodePeakDrag = 0;
   double _swipeThreshold = 70;
   bool _swipeEnabled = false;
   bool _fullscreen = false;
@@ -67,7 +73,11 @@ class PlayerInteractions extends ChangeNotifier {
   bool _episodeDragging = false;
   int _episodeCommit = 0;
   bool _episodeNavigationInFlight = false;
+  bool _episodeAnimationComplete = false;
+  int _episodeSwipeSequence = 0;
   Timer? _episodeTimer;
+  Uint8List? _episodeFrameBytes;
+  int _episodeFrameSequence = 0;
   int _volumeGeneration = 0;
   Future<void> _volumeRead = Future<void>.value();
   bool _volumeReadable = true;
@@ -78,6 +88,11 @@ class PlayerInteractions extends ChangeNotifier {
   bool get episodeDragging => _episodeDragging;
   int get episodeCommit => _episodeCommit;
   bool get episodeSwipeBusy => _episodeCommit != 0;
+  bool get episodeNavigationPending => _episodeNavigationInFlight;
+  int get episodeSwipeSequence => _episodeSwipeSequence;
+  Uint8List? get episodeFrameBytes => _episodeFrameBytes;
+  bool canSwipeEpisode(int direction) =>
+      canNavigateEpisode?.call(direction) ?? true;
 
   bool _moved = false;
   bool _held = false;
@@ -162,6 +177,7 @@ class PlayerInteractions extends ChangeNotifier {
           player.state.completed) {
         return;
       }
+      _clearEpisodeFrame();
       _boosting = true;
       _held = true;
       _boostRate = math.max(baseSpeed(), keyboard ? 3 : 2);
@@ -198,12 +214,14 @@ class PlayerInteractions extends ChangeNotifier {
       _episodeDrag = 0;
       _episodeDragging = false;
       _episodeCommit = 0;
+      _clearEpisodeFrame();
     }
     _pendingVolumeDelta = null;
     _volumeGeneration++;
     _pointer = null;
     _origin = null;
-    _lastPosition = null;
+    _velocityTracker = null;
+    _episodePeakDrag = 0;
     _seekTarget = null;
     _swipeAction = SwipeAction.none;
     _hudTimer?.cancel();
@@ -221,6 +239,7 @@ class PlayerInteractions extends ChangeNotifier {
     double width = 0.0,
     required double height,
   }) {
+    if (_disposed) return;
     _pointers.add(event.pointer);
     if (_pointers.length != 1 || _cancelUntilRelease) {
       cancel();
@@ -230,7 +249,10 @@ class PlayerInteractions extends ChangeNotifier {
       return;
     }
     _pointer = event.pointer;
-    _origin = _lastPosition = event.position;
+    _origin = event.position;
+    _velocityTracker = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
+    _episodePeakDrag = 0;
     _startX = event.localPosition.dx;
     _fullscreen = fullscreen;
     final start = event.localPosition;
@@ -249,6 +271,10 @@ class PlayerInteractions extends ChangeNotifier {
     _initialVolume = player.state.volume;
     _seekOrigin = player.state.position;
     _seekTarget = null;
+    _clearEpisodeFrame();
+    if (_swipeEnabled && !_fullscreen && captureEpisodeFrame != null) {
+      unawaited(_captureEpisodeFrame(event.pointer));
+    }
     final volumeTicket = ++_volumeGeneration;
     _volumeReadable = true;
     if (_swipeEnabled &&
@@ -282,8 +308,9 @@ class PlayerInteractions extends ChangeNotifier {
   }
 
   void pointerMove(PointerMoveEvent event) {
+    if (_disposed) return;
     if (_pointer != event.pointer || _origin == null) return;
-    _lastPosition = event.position;
+    _velocityTracker?.addPosition(event.timeStamp, event.position);
     final diff = event.position - _origin!;
     if (diff.distance > 18) {
       _moved = true;
@@ -291,7 +318,9 @@ class PlayerInteractions extends ChangeNotifier {
     }
     if (!_swipeEnabled || !_moved || _held || _viewHeight <= 0) return;
     if (_swipeAction == SwipeAction.none) {
-      if (diff.dy.abs() >= 28 && diff.dy.abs() > diff.dx.abs() * 1.5) {
+      final verticalSlop = _fullscreen ? 28 : 18;
+      if (diff.dy.abs() >= verticalSlop &&
+          diff.dy.abs() > diff.dx.abs() * 1.5) {
         if (_fullscreen && !_adjustmentGestureAllowed) return;
         _swipeAction = !_fullscreen
             ? SwipeAction.episode
@@ -302,6 +331,7 @@ class PlayerInteractions extends ChangeNotifier {
           diff.dx.abs() > diff.dy.abs() * 1.5 &&
           player.state.duration > Duration.zero) {
         _swipeAction = SwipeAction.seek;
+        _clearEpisodeFrame();
       }
     }
     final dy = -diff.dy;
@@ -309,7 +339,14 @@ class PlayerInteractions extends ChangeNotifier {
 
     if (_swipeAction == SwipeAction.episode) {
       _episodeDragging = true;
-      _episodeDrag = diff.dy.clamp(-_viewHeight, _viewHeight);
+      if (_episodePeakDrag.sign != diff.dy.sign ||
+          diff.dy.abs() > _episodePeakDrag.abs()) {
+        _episodePeakDrag = diff.dy;
+      }
+      final direction = diff.dy < 0 ? 1 : -1;
+      _episodeDrag = canSwipeEpisode(direction)
+          ? diff.dy.clamp(-_viewHeight, _viewHeight)
+          : (diff.dy * .22).clamp(-72.0, 72.0);
       notifyListeners();
     } else if (_swipeAction == SwipeAction.brightness) {
       _brightness = (_initialBrightness + deltaRatio).clamp(0.01, 1.0);
@@ -329,6 +366,7 @@ class PlayerInteractions extends ChangeNotifier {
   }
 
   void pointerUp(PointerUpEvent event) {
+    if (_disposed) return;
     _pointers.remove(event.pointer);
     if (_cancelUntilRelease) {
       _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
@@ -336,37 +374,34 @@ class PlayerInteractions extends ChangeNotifier {
       return;
     }
     if (_pointer != event.pointer || _origin == null) return;
-    final delta = (_lastPosition ?? event.position) - _origin!;
+    final delta = event.position - _origin!;
+    _velocityTracker?.addPosition(event.timeStamp, event.position);
+    final velocity =
+        _velocityTracker?.getVelocity().pixelsPerSecond ?? Offset.zero;
+    final vertical = delta.dy.abs() > delta.dx.abs() * 1.5;
+    final fling =
+        delta.dy.abs() >= 20 &&
+        velocity.dy.abs() >= 650 &&
+        velocity.dy.abs() > velocity.dx.abs() * 1.5 &&
+        velocity.dy.sign == delta.dy.sign;
+    final reversed =
+        _episodePeakDrag.sign == delta.dy.sign &&
+        _episodePeakDrag.abs() - delta.dy.abs() >= 24;
     final isVertical =
-        delta.dy.abs() >= _swipeThreshold &&
-        delta.dy.abs() > delta.dx.abs() * 1.5;
+        vertical && !reversed && (delta.dy.abs() >= _swipeThreshold || fling);
+    int? episodeDirection;
 
     if (_swipeAction == SwipeAction.episode &&
         _swipeEnabled &&
         !_held &&
         _moved &&
-        isVertical) {
-      if (available()) {
-        final direction = delta.dy < 0 ? 1 : -1;
-        if (onEpisodeSwipe == null) {
-          hint(onEpisode(direction));
-        } else {
-          _episodeCommit = direction;
-          _episodeDragging = false;
-          _episodeTimer = Timer(const Duration(milliseconds: 220), () async {
-            if (_disposed || !available()) {
-              _resetEpisodeSwipe();
-              return;
-            }
-            _episodeNavigationInFlight = true;
-            try {
-              await onEpisodeSwipe!(direction);
-            } finally {
-              _episodeNavigationInFlight = false;
-              _resetEpisodeSwipe();
-            }
-          });
-        }
+        isVertical &&
+        available()) {
+      final direction = delta.dy < 0 ? 1 : -1;
+      if (canSwipeEpisode(direction)) {
+        episodeDirection = direction;
+      } else {
+        hint(direction < 0 ? '已经是第一集' : '已经是最后一集');
       }
     } else if (_swipeAction == SwipeAction.seek &&
         _seekTarget != null &&
@@ -381,18 +416,88 @@ class PlayerInteractions extends ChangeNotifier {
     if (_moved || _held) {
       _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 250));
     }
-    if (_episodeCommit == 0) {
-      _episodeDragging = false;
-      _episodeDrag = 0;
-    }
-    notifyListeners();
+    _episodeDragging = false;
     _pointer = null;
     _origin = null;
+    _velocityTracker = null;
+    _episodePeakDrag = 0;
     _seekTarget = null;
     _endHold();
+    if (episodeDirection != null && onEpisodeSwipe != null) {
+      _beginEpisodeSwipe(episodeDirection);
+    } else {
+      _episodeDrag = 0;
+      _clearEpisodeFrame();
+      if (episodeDirection != null) hint(onEpisode(episodeDirection));
+      notifyListeners();
+    }
   }
 
-  void _resetEpisodeSwipe() {
+  Future<void> _captureEpisodeFrame(int pointer) async {
+    final sequence = _episodeFrameSequence;
+    try {
+      final bytes = await captureEpisodeFrame!().timeout(
+        const Duration(milliseconds: 180),
+      );
+      if (_disposed ||
+          sequence != _episodeFrameSequence ||
+          bytes == null ||
+          bytes.isEmpty ||
+          bytes.lengthInBytes > 4 * 1024 * 1024 ||
+          (_pointer != pointer &&
+              (_episodeCommit == 0 || _episodeAnimationComplete))) {
+        return;
+      }
+      _episodeFrameBytes = Uint8List.fromList(bytes).asUnmodifiableView();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _clearEpisodeFrame() {
+    _episodeFrameSequence++;
+    _episodeFrameBytes = null;
+  }
+
+  void _beginEpisodeSwipe(int direction) {
+    _episodeCommit = direction;
+    _episodeNavigationInFlight = true;
+    _episodeAnimationComplete = false;
+    final sequence = ++_episodeSwipeSequence;
+    _episodeTimer?.cancel();
+    _episodeTimer = Timer(episodeTransitionDuration, () {
+      if (_disposed || sequence != _episodeSwipeSequence) return;
+      _episodeAnimationComplete = true;
+      _clearEpisodeFrame();
+      _finishEpisodeSwipe();
+      notifyListeners();
+    });
+    notifyListeners();
+    unawaited(_navigateEpisode(direction, sequence));
+  }
+
+  Future<void> _navigateEpisode(int direction, int sequence) async {
+    try {
+      if (_disposed || sequence != _episodeSwipeSequence || !available()) {
+        return;
+      }
+      await onEpisodeSwipe!(direction);
+    } catch (_) {
+      if (!_disposed && sequence == _episodeSwipeSequence) {
+        hint('切换失败，请重试');
+      }
+    } finally {
+      if (!_disposed && sequence == _episodeSwipeSequence) {
+        _episodeNavigationInFlight = false;
+        _finishEpisodeSwipe();
+        notifyListeners();
+      }
+    }
+  }
+
+  void _finishEpisodeSwipe() {
+    if (_episodeNavigationInFlight || !_episodeAnimationComplete) return;
+    _episodeTimer?.cancel();
+    _episodeTimer = null;
     _episodeDrag = 0;
     _episodeDragging = false;
     _episodeCommit = 0;
@@ -439,6 +544,7 @@ class PlayerInteractions extends ChangeNotifier {
   }
 
   void pointerCancel(PointerCancelEvent event) {
+    if (_disposed) return;
     _pointers.remove(event.pointer);
     cancel();
     _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
@@ -541,6 +647,7 @@ class PlayerInteractions extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _clearEpisodeFrame();
     _episodeTimer?.cancel();
     _pendingVolumeDelta = null;
     _volumeGeneration++;

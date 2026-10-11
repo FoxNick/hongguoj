@@ -47,6 +47,69 @@ void main() {
   );
 
   testWidgets(
+    'startup readiness prepares media and taking transfers ownership',
+    (tester) async {
+      final repository = PendingPreloadRepository();
+      final prepared = <String>[];
+      final discarded = <String>[];
+      final preloader = PlaybackPreloader(
+        repository,
+        onPrepared: (plan) => prepared.add(plan.session),
+        onRelease: (plan) async => discarded.add(plan.session),
+      );
+      preloader.prepare(FixtureRepository.free, episode, immediate: true);
+      await tester.pump(const Duration(milliseconds: 1));
+      repository.pending.single.complete(
+        const PlaybackPlan(
+          url: 'file:///next.mp4',
+          session: 'next',
+          preloadState: 'caching',
+        ),
+      );
+      await tester.pump();
+      expect(prepared, isEmpty);
+      repository.cacheStatus = const PlaybackPlan(
+        url: 'file:///next.mp4',
+        session: 'next',
+        preloadState: 'caching',
+        startupReady: true,
+        mediaType: 'mp4',
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(prepared, ['next']);
+      final taken = preloader.take(FixtureRepository.free, episode);
+      expect(taken?.startupReady, true);
+      expect(taken?.mediaType, 'mp4');
+      preloader.dispose();
+      await tester.pump();
+      expect(discarded, isEmpty);
+      expect(repository.released, isEmpty);
+    },
+  );
+
+  testWidgets('discard releases native prepared media before its session', (
+    tester,
+  ) async {
+    final repository = PendingPreloadRepository();
+    final cleared = Completer<void>();
+    final preloader = PlaybackPreloader(
+      repository,
+      onRelease: (_) => cleared.future,
+    );
+    preloader.prepare(FixtureRepository.free, episode, immediate: true);
+    await tester.pump(const Duration(milliseconds: 1));
+    repository.pending.single.complete(plan('unused'));
+    await tester.pump();
+    preloader.clear();
+    await tester.pump();
+    expect(repository.released, isEmpty);
+    cleared.complete();
+    await tester.pump();
+    expect(repository.released, ['unused']);
+    preloader.dispose();
+  });
+
+  testWidgets(
     'whole episode completion requires verified status and survives URL expiry',
     (tester) async {
       var now = DateTime(2026, 10, 9);

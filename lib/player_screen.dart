@@ -214,7 +214,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmakuEnabled = preferences.danmaku;
     _preloadEnabled = true;
     _loader = PlaybackLoader(widget.repository);
-    _preloader = PlaybackPreloader(widget.repository);
+    _preloader = PlaybackPreloader(
+      widget.repository,
+      onPrepared: (plan) {
+        final player = _player;
+        if (!_closed && _foreground && player is LunaExoPlayer) {
+          unawaited(
+            player.prepareNext(
+              Media(plan.url, httpHeaders: plan.headers),
+              identity: plan.session,
+              mediaType: plan.mediaType,
+            ),
+          );
+        }
+      },
+      onRelease: (plan) async {
+        final player = _player;
+        if (player is LunaExoPlayer) {
+          await player.clearPreparedNext(identity: plan.session);
+        }
+      },
+    );
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
@@ -259,6 +279,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       onTogglePlayback: _togglePlayback,
       onSeek: _seekTo,
       onFullscreen: _rotate,
+      captureEpisodeFrame: () =>
+          _player is LunaExoPlayer ? _player.captureFrame() : Future.value(),
+      canNavigateEpisode: (direction) =>
+          _index + direction >= 0 &&
+          _index + direction < _detail.episodes.length,
       onEpisodeSwipe: (direction) async {
         final next = _index + direction;
         if (next < 0 || next >= _detail.episodes.length) {
@@ -796,14 +821,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (duration <= 0) return;
     final buffered = state.buffer.inMilliseconds;
     final fullyBuffered = buffered >= duration;
-    if (!fullyBuffered && (position < 2000 || buffered - position < 5000)) {
+    if (!fullyBuffered && (position < 500 || buffered - position < 2000)) {
       return;
     }
     _preloader.prepare(
       _detail.drama,
       _detail.episodes[_index + 1],
       quality: _requestedQuality,
-      immediate: fullyBuffered,
+      immediate: true,
     );
   }
 
@@ -1198,12 +1223,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     _cancelSeasonAdvance();
     _completedSeasonKey = null;
     _dismissSeasonNotice();
+    final switchClock = Stopwatch()..start();
     final smooth =
-        (automaticAdvance || gestureAdvance) &&
         recoveryAction == null &&
         (changingSeason || (index - _index).abs() == 1) &&
         _player is LunaExoPlayer &&
         _player.canTransition;
+    final pausedPrevious = smooth ? _player.pause() : Future<void>.value();
     _interactions.cancel();
     if (widget.handoff != null &&
         handoffPlan == null &&
@@ -1237,7 +1263,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _smoothTransition = smooth;
     _transitionWaitVisible = false;
     if (smooth) {
-      _transitionWaitTimer = Timer(const Duration(seconds: 4), () {
+      _transitionWaitTimer = Timer(const Duration(milliseconds: 700), () {
         if (mounted && !_closed && ticket == _generation && _loading) {
           setState(() => _transitionWaitVisible = true);
         }
@@ -1280,14 +1306,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     bool installed = false;
     try {
       DiaryService.add(
-        '[Switch] episode=${detail.episodes[index].number}, phase=preload, generation=$ticket',
+        '[Switch] episode=${detail.episodes[index].number}, phase=request, generation=$ticket, origin=${gestureAdvance
+            ? 'swipe'
+            : automaticAdvance
+            ? 'automatic'
+            : 'selection'}, reuse=$smooth',
       );
       warmed = await warmedFuture;
+      DiaryService.add(
+        '[Switch] episode=${detail.episodes[index].number}, phase=preload, elapsedMs=${switchClock.elapsedMilliseconds}, hit=${warmed != null}, startup=${warmed?.startupReady ?? false}, complete=${warmed?.preloadComplete ?? false}',
+      );
       if (_closed || ticket != _generation) return;
       await _serialize(() async {
         if (_closed || ticket != _generation) {
           return;
         }
+        await pausedPrevious;
         if (smooth) {
           unawaited(_saveProgress(flush: true));
         } else {
@@ -1424,6 +1458,15 @@ class _PlayerScreenState extends State<PlayerScreen>
             media,
             play: _foreground && _playIntent,
             reopenOnFailure: plan.preloadState.isEmpty,
+            identity: plan.session,
+            mediaType: plan.mediaType,
+            requestElapsedMs: switchClock.elapsedMilliseconds,
+          );
+        } else if (_player is LunaExoPlayer) {
+          await _player.open(
+            media,
+            play: _foreground && _playIntent,
+            mediaType: plan.mediaType,
           );
         } else {
           await _player.open(media, play: _foreground && _playIntent);
@@ -1445,7 +1488,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           });
           if (_pendingError) _queueRecovery();
           DiaryService.add(
-            '[Switch] episode=${detail.episodes[index].number}, phase=ready',
+            '[Switch] episode=${detail.episodes[index].number}, phase=ready, requestToReadyMs=${switchClock.elapsedMilliseconds}, prepared=${smooth && _player.lastTransitionUsedPrepared}, firstFrame=${smooth && _player.lastTransitionFirstFrame}',
           );
           _danmaku.setPlan(plan);
           _syncDanmaku();
@@ -1487,7 +1530,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     } finally {
       if (transitionPrevious != null) {
-        await _releaseSession(transitionPrevious!.session);
+        unawaited(_releaseSession(transitionPrevious!.session));
       }
       if (warmed != null && !installed) {
         await _releaseSession(warmed.session);
@@ -2356,6 +2399,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     return EpisodeSwipeSurface(
       interactions: _interactions,
       enabled: _mobile && !_showFullscreen,
+      contentReady: !_loading && _error == null,
+      currentLabel:
+          '${_detail.drama.title}\n第 ${_detail.episodes[_index].number} 集',
       previousLabel: _index > 0
           ? '${_detail.drama.title}\n第 ${_detail.episodes[_index - 1].number} 集'
           : '已经是第一集',

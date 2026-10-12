@@ -1801,7 +1801,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _seekTo(Duration target) async {
+  Future<void> _seekTo(Duration target, {bool resumeAfterSeek = false}) async {
     if (_closed || _loading || _error != null) return;
     _cancelSeasonAdvance();
     _completedSeasonKey = null;
@@ -1809,6 +1809,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     widget.handoff?.fail('接收端已调整播放位置');
     final ticket = ++_seekSequence;
     final generation = _generation;
+    final intentSequence = _seasonSequence;
+    final resume = resumeAfterSeek && !_player.state.playing;
     _danmaku.beginSeek();
     _enhancement.ignorePerformance();
     var succeeded = false;
@@ -1822,9 +1824,42 @@ class _PlayerScreenState extends State<PlayerScreen>
         _danmaku.endSeek(succeeded ? target : _player.state.position);
       }
     }
+    if (succeeded &&
+        resume &&
+        !_closed &&
+        !_loading &&
+        _error == null &&
+        _foreground &&
+        !_panelOpen &&
+        !widget.store.locked &&
+        widget.store.profileEpoch == _profileEpoch &&
+        ticket == _seekSequence &&
+        generation == _generation &&
+        intentSequence == _seasonSequence &&
+        target < _player.state.duration &&
+        !_player.state.playing) {
+      _playIntent = true;
+      _syncScreenOn();
+      _enhancement.mediaReady();
+      _health.reset();
+      try {
+        await _player.play();
+      } catch (_) {
+        if (!_closed && generation == _generation) {
+          _notice('播放失败，请重试');
+        }
+      }
+      if (!_closed && generation == _generation) _syncDanmaku();
+    }
   }
 
-  void _seek(int seconds) {
+  void _seek(int seconds, {bool resumeAfterSeek = false}) {
+    if (resumeAfterSeek &&
+        (!_interactions.available() ||
+            _player.state.duration <= Duration.zero)) {
+      return;
+    }
+    if (resumeAfterSeek) _interactions.cancel();
     final desired = _player.state.position + Duration(seconds: seconds);
     final maxDuration = _player.state.duration;
     final target = desired < Duration.zero
@@ -1832,7 +1867,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         : maxDuration > Duration.zero && desired > maxDuration
         ? maxDuration
         : desired;
-    unawaited(_seekTo(target));
+    unawaited(_seekTo(target, resumeAfterSeek: resumeAfterSeek));
+    if (resumeAfterSeek) {
+      _interactions.hint('快进至 ${formatPosition(target.inMilliseconds / 1000)}');
+    }
   }
 
   Future<void> _televisionEpisodes(BuildContext context) async {
@@ -2194,6 +2232,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             episodeLabel: '第 ${_detail.episodes[_index].number} 集',
             portraitFooter: _portraitWatching ? _mobilePortraitFooter() : null,
             onTogglePlayback: _togglePlayback,
+            onForward: () => _seek(15, resumeAfterSeek: true),
             swipeEnabled: _mobile,
             onFullscreen: _rotate,
             onBack: _back,

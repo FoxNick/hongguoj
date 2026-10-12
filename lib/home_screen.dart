@@ -1,3 +1,4 @@
+import 'app_update_screen.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1009,6 +1010,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _refreshCatalog,
                   ),
+                const AppUpdateIndicator(),
                 PopupMenuButton<String>(
                   tooltip: '更多',
                   onSelected: (value) {
@@ -1047,6 +1049,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         children: [
                           const Text('独立运行，打开即可浏览和播放。观看记录与追剧收藏保存在当前设备。'),
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.of(context, rootNavigator: true).pop();
+                              openAppUpdates(context);
+                            },
+                            icon: const Icon(Icons.system_update),
+                            label: const Text('检查软件更新'),
+                          ),
                         ],
                       );
                     }

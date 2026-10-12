@@ -34,7 +34,9 @@ if options.platform == 'android':
             missing = set(required) - names
             if missing:
                 raise SystemExit('APK 缺少原生库：' + ', '.join(sorted(missing)))
-        target = output / f'{variant.slug}-{version}-{abi}.apk'
+        artifact_name = (f'HongguoTV-{version.split("+")[0]}-{abi}.apk' if variant.all_sources
+                         else f'{variant.slug}-{version}-{abi}.apk')
+        target = output / artifact_name
         shutil.copy2(source, target)
         artifacts.append(target)
 else:
@@ -56,7 +58,7 @@ else:
     artifacts.append(target)
 
 checksums = []
-for artifact in sorted(output.glob(f'*-{version}-*')):
+for artifact in sorted(artifacts):
     digest = hashlib.sha256()
     with artifact.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):

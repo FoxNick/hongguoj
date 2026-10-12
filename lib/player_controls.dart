@@ -25,6 +25,7 @@ class PlayerControls extends StatefulWidget {
     required this.title,
     this.episodeLabel = '',
     required this.onTogglePlayback,
+    required this.onForward,
     required this.onEpisodes,
     required this.onSpeed,
     required this.onQuality,
@@ -59,6 +60,7 @@ class PlayerControls extends StatefulWidget {
   final String title;
   final String episodeLabel;
   final VoidCallback onTogglePlayback;
+  final VoidCallback onForward;
   final Future<void> Function() onEpisodes;
   final Future<void> Function() onSpeed;
   final Future<void> Function() onQuality;
@@ -202,12 +204,23 @@ class _PlayerControlsState extends State<PlayerControls> {
     _scheduleHide();
   }
 
+  bool get _controlsVisible {
+    final state = widget.player.state;
+    return !_locked &&
+        widget.enabled &&
+        !(widget.quietEpisodeChange?.call() ?? false) &&
+        (_visible ||
+            (!_suppressAutoPlaybackStart &&
+                (!state.playing || state.buffering)) ||
+            widget.panelOpen);
+  }
+
   void _tap() {
     if (widget.interactions.suppressTap) return;
     widget.onFocusSurface();
     if (_locked) return;
     if (widget.swipeEnabled && !widget.fullscreen && widget.enabled) {
-      widget.onTogglePlayback();
+      if (_controlsVisible) widget.onTogglePlayback();
       _show();
       return;
     }
@@ -248,14 +261,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     final position = state.position.inMilliseconds / 1000;
     final buffered = state.buffer.inMilliseconds / 1000;
     final quiet = widget.quietEpisodeChange?.call() ?? false;
-    final visible =
-        !_locked &&
-        widget.enabled &&
-        !quiet &&
-        (_visible ||
-            (!_suppressAutoPlaybackStart &&
-                (!state.playing || state.buffering)) ||
-            widget.panelOpen);
+    final visible = _controlsVisible;
     return MouseRegion(
       onHover: (_) => _show(),
       cursor: visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
@@ -979,7 +985,7 @@ class _PlayerControlsState extends State<PlayerControls> {
           onPressed:
               widget.enabled && widget.player.state.duration > Duration.zero
               ? () {
-                  widget.interactions.seek(15);
+                  widget.onForward();
                   _show();
                 }
               : null,

@@ -30,8 +30,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures { buildConfig = true }
+
     defaultConfig {
         applicationId = "com.hongguo.tv"
+        buildConfigField("boolean", "UPDATER_ALL_SOURCES", allSources.toString())
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

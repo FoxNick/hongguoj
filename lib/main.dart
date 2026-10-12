@@ -20,7 +20,9 @@ import 'package_smoke.dart';
 import 'lan_controller.dart';
 import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
+import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
+import 'app_updates.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +35,7 @@ Future<void> main(List<String> arguments) async {
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
+  DanmakuEmojiAssets.registerLicenses();
   if (Platform.isWindows && arguments.firstOrNull == '--package-smoke') {
     await runPackageSmoke(arguments);
     return;
@@ -66,6 +69,8 @@ class _AppBootstrapState extends State<AppBootstrap>
     LanController.current = null;
     MediaLibrary.current?.dispose();
     MediaLibrary.current = null;
+    AppUpdates.current?.dispose();
+    AppUpdates.current = null;
     store?.dispose();
     super.dispose();
   }
@@ -81,6 +86,8 @@ class _AppBootstrapState extends State<AppBootstrap>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && Platform.isAndroid) {
       unawaited(_refreshDevice());
+      unawaited(AppUpdates.current?.returnedFromSettings());
+      unawaited(AppUpdates.current?.check());
     }
     if (!Platform.isIOS) return;
     final library = MediaLibrary.current;
@@ -117,6 +124,11 @@ class _AppBootstrapState extends State<AppBootstrap>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _refreshDevice();
+      if (!mounted) return;
+      if (Platform.isAndroid && AppUpdates.current == null) {
+        AppUpdates.current = AppUpdates(preferences: preferences);
+        unawaited(AppUpdates.current!.check());
+      }
       await repository.initialize();
       if (mounted) {
         setState(() {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'danmaku_controller.dart';
+import 'danmaku_emoji_render.dart';
 import 'danmaku_models.dart';
 import 'danmaku_text.dart';
 
@@ -101,13 +102,20 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   final _televisionSeen = <String>{};
   List<DanmakuFlight> _televisionFlights = [];
   Object? _televisionLayout;
+  final _emojiCache = DanmakuEmojiCache();
+  Object? _emojiWarmRevision;
 
   @override
   void initState() {
     super.initState();
+    _emojiCache.addListener(_emojiReady);
     _televisionTicker = createTicker((elapsed) {
       _televisionPositionMs = _televisionBaseMs + elapsed.inMilliseconds;
     });
+  }
+
+  void _emojiReady() {
+    if (mounted) setState(() {});
   }
 
   void _updateTelevision(
@@ -200,6 +208,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
   @override
   void dispose() {
+    _emojiCache.dispose();
     _televisionTicker.dispose();
     super.dispose();
   }
@@ -273,15 +282,20 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                         return const SizedBox.shrink();
                       }
                       double measure(String text) {
-                        final painter = TextPainter(
-                          text: TextSpan(text: text, style: style),
-                          textDirection: TextDirection.ltr,
-                          textScaler: scaler,
-                          maxLines: 1,
-                        )..layout();
-                        final measured = painter.width;
-                        painter.dispose();
-                        return measured;
+                        return DanmakuEmojiContent.parse(
+                          text,
+                        ).measure(style, scaler);
+                      }
+
+                      final emojiRevision = (
+                        controller,
+                        controller.dataRevision,
+                      );
+                      if (_emojiWarmRevision != emojiRevision) {
+                        _emojiWarmRevision = emojiRevision;
+                        _emojiCache.ensureLoaded(
+                          controller.items.map(danmakuFlightText),
+                        );
                       }
 
                       final layout = (
@@ -350,6 +364,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                                   revision: controller.motionRevision,
                                   style: style,
                                   scaler: scaler,
+                                  emojiCache: _emojiCache,
                                 ),
                               ),
                         ],
@@ -377,6 +392,7 @@ class _DanmakuMotion extends StatefulWidget {
     required this.revision,
     required this.style,
     required this.scaler,
+    required this.emojiCache,
   });
   final DanmakuFlight flight;
   final int lifetimeMs;
@@ -387,6 +403,7 @@ class _DanmakuMotion extends StatefulWidget {
   final int revision;
   final TextStyle style;
   final TextScaler scaler;
+  final DanmakuEmojiCache emojiCache;
 
   @override
   State<_DanmakuMotion> createState() => _DanmakuMotionState();
@@ -444,13 +461,11 @@ class _DanmakuMotionState extends State<_DanmakuMotion>
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: _motion,
     child: RepaintBoundary(
-      child: Text(
-        widget.flight.text,
+      child: DanmakuEmojiText(
+        text: widget.flight.text,
         style: widget.style,
-        textScaler: widget.scaler,
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-        softWrap: false,
+        scaler: widget.scaler,
+        cache: widget.emojiCache,
       ),
     ),
     builder: (context, child) => Transform.translate(

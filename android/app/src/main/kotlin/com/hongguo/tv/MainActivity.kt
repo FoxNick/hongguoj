@@ -29,6 +29,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var appUpdateBridge: AppUpdateBridge? = null
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
@@ -103,11 +104,6 @@ class MainActivity : FlutterActivity() {
             return true
         }
         return super.dispatchKeyEvent(event)
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onBackPressed() {
-        if (!forwardTelevisionBack()) super.onBackPressed()
     }
 
     @Suppress("DEPRECATION")
@@ -204,6 +200,7 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        appUpdateBridge?.onResume()
         applyPlaybackScreenOn()
         applyFullscreenBrightness()
         if (televisionMode) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -211,6 +208,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onPause() {
         activityResumed = false
+        appUpdateBridge?.onPause()
         applyPlaybackScreenOn()
         applyFullscreenBrightness()
         super.onPause()
@@ -223,6 +221,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        appUpdateBridge = AppUpdateBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/device")
             .also { channel ->
                 channel.setMethodCallHandler { call, result ->
@@ -417,7 +416,15 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (appUpdateBridge?.onActivityResult(requestCode, resultCode) == true) return
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        appUpdateBridge?.close()
+        appUpdateBridge = null
         playbackScreenOn = false
         applyPlaybackScreenOn()
         setFullscreenBrightness(false)

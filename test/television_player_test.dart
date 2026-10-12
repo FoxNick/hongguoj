@@ -283,6 +283,42 @@ void main() {
   );
 
   testWidgets(
+    'TV framework back closes modal, paused controls and then route',
+    (tester) async {
+      final repository = RouteRepository();
+      final player = ScriptedPlayer();
+      await mount(tester, repository, player);
+      await player.pause();
+      await settle(tester);
+      focusRemote(tester, find.byKey(const ValueKey('tv-settings')));
+      await settle(tester);
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('播放设置'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle(tester);
+      expect(find.text('播放设置'), findsNothing);
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(find.byKey(const ValueKey('tv-play-pause')), findsNothing);
+      expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(player.state.playing, isFalse);
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await settle(tester);
+      expect(find.byType(PlayerScreen), findsNothing);
+      expect(find.text('打开测试视频'), findsOneWidget);
+      expect(player.disposed, isTrue);
+      expect(repository.active, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'native TV back dismisses a seek preview without leaving playback',
     (tester) async {
       final repository = RouteRepository();

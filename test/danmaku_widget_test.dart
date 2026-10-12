@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:duanju_app/danmaku_controller.dart';
 import 'package:duanju_app/danmaku_models.dart';
+import 'package:duanju_app/danmaku_emoji_render.dart';
 import 'package:duanju_app/danmaku_overlay.dart';
 import 'package:duanju_app/local_profiles.dart';
 import 'package:duanju_app/local_store.dart';
@@ -51,7 +52,13 @@ void main() {
           ),
         ),
       );
-      expect(find.text('合成弹幕🤭  ♥ 3'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DanmakuEmojiText && widget.text == '合成弹幕🤭  ♥ 3',
+        ),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('danmaku-item-b')), findsNothing);
       expect(find.byKey(const ValueKey('danmaku-item-c')), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());

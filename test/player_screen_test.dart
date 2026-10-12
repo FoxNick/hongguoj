@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
+
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/models.dart';
 import 'package:duanju_app/player_screen.dart';
+import 'package:duanju_app/player_controls.dart';
 import 'package:duanju_app/app_layout.dart';
 import 'package:duanju_app/app_theme.dart';
 import 'package:flutter/foundation.dart';
@@ -34,6 +37,31 @@ class PreloadingRouteRepository extends RouteRepository {
       session: session,
       prefetchedBytes: 4 << 20,
     );
+  }
+}
+
+class DeferredSeekPlayer extends ScriptedPlayer {
+  bool deferSeek = false;
+  final pendingSeeks = <Completer<void>>[];
+  final commands = <String>[];
+  int resumeCalls = 0;
+
+  @override
+  Future<void> seek(Duration duration) async {
+    commands.add('seek:${duration.inSeconds}');
+    await super.seek(duration);
+    if (deferSeek) {
+      final pending = Completer<void>();
+      pendingSeeks.add(pending);
+      await pending.future;
+    }
+  }
+
+  @override
+  Future<void> play() async {
+    commands.add('play');
+    resumeCalls++;
+    if (!state.playing) await super.playOrPause();
   }
 }
 
@@ -325,12 +353,12 @@ void main() {
   );
 
   testWidgets(
-    'portrait forward uses the existing screen seek and pause intent',
+    'portrait forward seeks first and resumes a paused screen exactly once',
     (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       try {
         final repository = RouteRepository();
-        final player = ScriptedPlayer();
+        final player = DeferredSeekPlayer();
         await mount(tester, repository, player, size: const Size(390, 844));
         player.videoSize(1920, 1080);
         await settleOperations(tester);
@@ -344,10 +372,176 @@ void main() {
         await tester.tap(forward);
         await settleOperations(tester);
         expect(player.state.position, const Duration(seconds: 37));
-        expect(player.state.playing, isFalse);
+        expect(player.state.playing, isTrue);
+        expect(player.resumeCalls, 1);
+        expect(
+          player.commands,
+          containsAllInOrder(['seek:22', 'play', 'seek:37']),
+        );
         expect(player.opened.length, 1);
         expect(find.byKey(const ValueKey('player-mobile-next')), findsNothing);
         await capture(tester, 'portrait-forward-fifteen');
+        await unmount(tester, player);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets('fullscreen forward resumes after the seek completes', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      final player = DeferredSeekPlayer();
+      await mount(
+        tester,
+        RouteRepository(),
+        player,
+        size: const Size(960, 540),
+      );
+      player.videoSize(1920, 1080);
+      await settleOperations(tester);
+      await tester.tap(find.byKey(const ValueKey('player-mobile-play')));
+      await settleOperations(tester);
+      player.deferSeek = true;
+      await tester.tap(find.byKey(const ValueKey('player-mobile-forward')));
+      await settleOperations(tester);
+      expect(player.pendingSeeks, hasLength(1));
+      expect(player.state.playing, isFalse);
+      expect(player.resumeCalls, 0);
+      player.pendingSeeks.single.complete();
+      await settleOperations(tester);
+      expect(player.state.position, const Duration(seconds: 22));
+      expect(player.state.playing, isTrue);
+      expect(player.resumeCalls, 1);
+      await unmount(tester, player);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  for (final interruption in [
+    'newer seek',
+    'manual pause',
+    'background and return',
+    'episode switch',
+    'close',
+    'seek failure',
+  ]) {
+    testWidgets('forward resume ignores $interruption during pending seek', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        final player = DeferredSeekPlayer();
+        await mount(
+          tester,
+          RouteRepository(),
+          player,
+          size: const Size(390, 844),
+        );
+        final play = find.byKey(const ValueKey('player-mobile-play'));
+        final forward = find.byKey(const ValueKey('player-mobile-forward'));
+        await tester.tap(play);
+        await settleOperations(tester);
+        expect(player.state.playing, isFalse);
+        player.deferSeek = true;
+        await tester.tap(forward);
+        await settleOperations(tester);
+        expect(player.pendingSeeks, hasLength(1));
+        expect(player.resumeCalls, 0);
+        switch (interruption) {
+          case 'newer seek':
+            await tester.tap(forward);
+            await settleOperations(tester);
+            expect(player.pendingSeeks, hasLength(2));
+            break;
+          case 'manual pause':
+            await tester.tap(play);
+            await settleOperations(tester);
+            await tester.tap(play);
+            await settleOperations(tester);
+            expect(player.state.playing, isFalse);
+            break;
+          case 'background and return':
+            tester.binding.handleAppLifecycleStateChanged(
+              AppLifecycleState.paused,
+            );
+            await settleOperations(tester);
+            tester.binding.handleAppLifecycleStateChanged(
+              AppLifecycleState.resumed,
+            );
+            await settleOperations(tester);
+            break;
+          case 'episode switch':
+            player.deferSeek = false;
+            tester
+                .widget<PlayerControls>(find.byType(PlayerControls))
+                .onNext!();
+            await settleOperations(tester);
+            expect(player.opened, hasLength(2));
+            break;
+          case 'close':
+            await unmount(tester, player);
+            break;
+          case 'seek failure':
+            player.pendingSeeks.first.completeError(
+              StateError('synthetic seek failure'),
+            );
+            await settleOperations(tester);
+            expect(player.resumeCalls, 0);
+            expect(player.state.playing, isFalse);
+            expect(find.text('跳转失败，请重试'), findsOneWidget);
+            await unmount(tester, player);
+            return;
+        }
+        player.pendingSeeks.first.complete();
+        await settleOperations(tester);
+        expect(player.resumeCalls, 0);
+        if (interruption == 'newer seek') {
+          expect(player.state.playing, isFalse);
+          player.pendingSeeks.last.complete();
+          await settleOperations(tester);
+          expect(player.state.playing, isTrue);
+          expect(player.resumeCalls, 1);
+          expect(player.state.position, const Duration(seconds: 37));
+        } else if (interruption == 'episode switch') {
+          expect(player.state.position, Duration.zero);
+          expect(player.state.playing, isTrue);
+        } else if (interruption != 'close') {
+          expect(player.state.playing, isFalse);
+        }
+        if (interruption != 'close') await unmount(tester, player);
+        expect(tester.takeException(), isNull);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  }
+
+  testWidgets(
+    'paused forward clamps at the end without replaying the episode',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        final player = DeferredSeekPlayer();
+        await mount(
+          tester,
+          RouteRepository(),
+          player,
+          size: const Size(390, 844),
+        );
+        await tester.tap(find.byKey(const ValueKey('player-mobile-play')));
+        await settleOperations(tester);
+        await player.seek(const Duration(seconds: 115));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('player-mobile-forward')));
+        await settleOperations(tester);
+        expect(player.state.position, const Duration(seconds: 120));
+        expect(player.state.playing, isFalse);
+        expect(player.resumeCalls, 0);
+        expect(player.opened, hasLength(1));
         await unmount(tester, player);
       } finally {
         debugDefaultTargetPlatformOverride = null;

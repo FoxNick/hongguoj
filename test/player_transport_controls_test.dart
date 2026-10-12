@@ -23,12 +23,15 @@ class TransportFixture {
   var enabled = true;
   var hasNext = true;
   var nextCalls = 0;
+  var forwardCalls = 0;
+  var toggleCalls = 0;
   var unmounted = false;
 
   Future<void> mount(
     WidgetTester tester, {
     Size size = const Size(960, 540),
     bool fullscreen = true,
+    bool showOnPlaybackReady = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -83,7 +86,7 @@ class TransportFixture {
                     interactions: interactions,
                     enabled: enabled,
                     fullscreen: fullscreen,
-                    showOnPlaybackReady: true,
+                    showOnPlaybackReady: showOnPlaybackReady,
                     swipeEnabled: true,
                     title: '合成视频 · 播放按钮验证',
                     episodeLabel: '第 1 集',
@@ -91,7 +94,24 @@ class TransportFixture {
                     onBack: () {},
                     onPrevious: null,
                     onNext: hasNext ? () => nextCalls++ : null,
-                    onTogglePlayback: player.playOrPause,
+                    onTogglePlayback: () {
+                      toggleCalls++;
+                      player.playOrPause();
+                    },
+                    onForward: () async {
+                      forwardCalls++;
+                      final resume = !player.state.playing;
+                      final target = Duration(
+                        milliseconds:
+                            (player.state.position.inMilliseconds + 15000)
+                                .clamp(0, player.state.duration.inMilliseconds),
+                      );
+                      seeks.add(target);
+                      await player.seek(target);
+                      if (resume && target < player.state.duration) {
+                        await player.playOrPause();
+                      }
+                    },
                     onEpisodes: () async {},
                     onSpeed: () async {},
                     onQuality: () async {},
@@ -160,7 +180,9 @@ void main() {
         const Duration(seconds: 44),
         const Duration(seconds: 59),
       ]);
-      expect(fixture.platform.state.playing, isFalse);
+      expect(fixture.platform.state.playing, isTrue);
+      expect(fixture.forwardCalls, 2);
+      expect(fixture.toggleCalls, 0);
       await fixture.player.seek(const Duration(seconds: 115));
       await tester.pump();
       await tester.tap(forward);
@@ -236,7 +258,7 @@ void main() {
   });
 
   testWidgets(
-    'portrait forward follows play and preserves seek bounds and pause intent',
+    'portrait forward follows play, resumes once and preserves seek bounds',
     (tester) async {
       final fixture = TransportFixture();
       await fixture.mount(
@@ -264,9 +286,9 @@ void main() {
         const Duration(seconds: 44),
         const Duration(seconds: 59),
       ]);
-      expect(fixture.platform.state.playing, isFalse);
-      await fixture.player.playOrPause();
-      await tester.pump();
+      expect(fixture.platform.state.playing, isTrue);
+      expect(fixture.forwardCalls, 2);
+      expect(fixture.toggleCalls, 0);
       await tester.tap(forward);
       await tester.pump();
       expect(fixture.seeks.last, const Duration(seconds: 74));
@@ -340,8 +362,95 @@ void main() {
     await tester.tap(forward);
     await tester.pump();
     expect(fixture.seeks, [const Duration(seconds: 44)]);
-    expect(fixture.platform.state.playing, isFalse);
+    expect(fixture.platform.state.playing, isTrue);
+    expect(fixture.toggleCalls, 0);
     expect(tester.takeException(), isNull);
+    await fixture.unmount(tester);
+  });
+
+  for (final playing in [false, true]) {
+    testWidgets(
+      'portrait hidden tap only reveals controls when playing=$playing',
+      (tester) async {
+        final fixture = TransportFixture();
+        await fixture.mount(
+          tester,
+          size: const Size(390, 844),
+          fullscreen: false,
+          showOnPlaybackReady: false,
+        );
+        if (playing) {
+          await fixture.player.playOrPause();
+          await tester.pump();
+        }
+        final chrome = find.byKey(const ValueKey('player-chrome'));
+        expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
+        final position = fixture.player.state.position;
+        await tester.tapAt(const Offset(100, 250));
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+        expect(fixture.platform.state.playing, playing);
+        expect(fixture.player.state.position, position);
+        expect(fixture.toggleCalls, 0);
+        expect(fixture.forwardCalls, 0);
+        await tester.tapAt(const Offset(100, 250));
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(fixture.platform.state.playing, !playing);
+        expect(fixture.toggleCalls, 1);
+        expect(tester.takeException(), isNull);
+        await fixture.unmount(tester);
+      },
+    );
+  }
+
+  testWidgets(
+    'portrait auto-hidden forward location reveals without activating',
+    (tester) async {
+      final fixture = TransportFixture();
+      await fixture.mount(
+        tester,
+        size: const Size(390, 844),
+        fullscreen: false,
+      );
+      final jump = tester.getCenter(forward);
+      await fixture.player.playOrPause();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 5));
+      final chrome = find.byKey(const ValueKey('player-chrome'));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
+      await tester.tapAt(jump);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, 1);
+      expect(fixture.platform.state.playing, isTrue);
+      expect(fixture.seeks, isEmpty);
+      expect(fixture.toggleCalls, 0);
+      expect(fixture.forwardCalls, 0);
+      await tester.tap(forward);
+      await tester.pump();
+      expect(fixture.forwardCalls, 1);
+      expect(fixture.toggleCalls, 0);
+      expect(fixture.seeks, [const Duration(seconds: 44)]);
+      await fixture.unmount(tester);
+    },
+  );
+
+  testWidgets('fullscreen surface taps keep visibility-only behavior', (
+    tester,
+  ) async {
+    final fixture = TransportFixture();
+    await fixture.mount(tester);
+    await fixture.player.playOrPause();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    final chrome = find.byKey(const ValueKey('player-chrome'));
+    expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
+    for (final opacity in [1.0, 0.0]) {
+      await tester.tapAt(const Offset(350, 200));
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(tester.widget<AnimatedOpacity>(chrome).opacity, opacity);
+      expect(fixture.platform.state.playing, isTrue);
+      expect(fixture.toggleCalls, 0);
+    }
     await fixture.unmount(tester);
   });
 

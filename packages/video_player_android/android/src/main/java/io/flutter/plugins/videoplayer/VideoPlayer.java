@@ -9,6 +9,7 @@ import static androidx.media3.common.Player.REPEAT_MODE_OFF;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Surface;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
@@ -44,6 +45,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
   @Nullable private final PreparedNext preparedNext;
   @NonNull private final FrameCapture frameCapture = new FrameCapture();
   private long mediaGeneration;
+  @Nullable private Surface platformCaptureSurface;
   // TODO: Migrate to stable API, see https://github.com/flutter/flutter/issues/147039.
   @UnstableApi @Nullable protected DefaultTrackSelector trackSelector;
 
@@ -142,9 +144,31 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
         prepared, requestElapsedMs, result);
   }
 
+  void waitForFirstFrame(long generation, io.flutter.plugin.common.MethodChannel.Result result) {
+    playbackTransition.waitForFirstFrame(generation, result);
+  }
+
+  public void setFrameCaptureSurface(@NonNull Surface surface) {
+    if (!isDisposed) platformCaptureSurface = surface;
+  }
+
+  public void clearFrameCaptureSurface(@NonNull Surface surface) {
+    if (platformCaptureSurface == surface) platformCaptureSurface = null;
+  }
+
   void captureFrame(io.flutter.plugin.common.MethodChannel.Result result) {
-    if (isDisposed || surfaceProducer == null || playbackTransition.pending()
-        || exoPlayer.getPlaybackState() != androidx.media3.common.Player.STATE_READY) {
+    captureFrame(FrameCapture.MAX_EDGE, result);
+  }
+
+  void captureFrame(int maxEdge, io.flutter.plugin.common.MethodChannel.Result result) {
+    if (isDisposed || (surfaceProducer == null && platformCaptureSurface == null)
+        || playbackTransition.pending()) {
+      result.success(null);
+      return;
+    }
+    int state = exoPlayer.getPlaybackState();
+    if (state != androidx.media3.common.Player.STATE_READY
+        && state != androidx.media3.common.Player.STATE_ENDED) {
       result.success(null);
       return;
     }
@@ -159,9 +183,12 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
       result.success(null);
       return;
     }
-    frameCapture.capture(surfaceProducer.getSurface(), size.width, size.height,
+    Surface surface = surfaceProducer == null
+        ? platformCaptureSurface : surfaceProducer.getSurface();
+    frameCapture.capture(surface, size.width, size.height, maxEdge,
         () -> !isDisposed && generation == mediaGeneration
-            && java.util.Objects.equals(item, exoPlayer.getCurrentMediaItem()), result);
+            && java.util.Objects.equals(item, exoPlayer.getCurrentMediaItem())
+            && (surfaceProducer != null || platformCaptureSurface == surface), result);
   }
 
   static boolean canCaptureFrame(androidx.media3.common.VideoSize size, Format format) {
@@ -535,6 +562,7 @@ public abstract class VideoPlayer implements VideoPlayerInstanceApi {
     if (isDisposed) return;
     mediaGeneration++;
     frameCapture.dispose();
+    platformCaptureSurface = null;
     playbackTransition.dispose();
     if (preparedNext != null) preparedNext.dispose();
     isDisposed = true;

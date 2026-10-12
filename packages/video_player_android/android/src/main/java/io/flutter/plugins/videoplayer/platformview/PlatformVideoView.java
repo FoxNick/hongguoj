@@ -11,10 +11,12 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 import io.flutter.plugin.platform.PlatformView;
+import io.flutter.plugins.videoplayer.VideoPlayer;
 
 /**
  * A class used to create a native video view that can be embedded in a Flutter app. It wraps an
@@ -23,6 +25,7 @@ import io.flutter.plugin.platform.PlatformView;
 public final class PlatformVideoView implements PlatformView {
   @NonNull private final SurfaceView surfaceView;
   @NonNull private final ExoPlayer exoPlayer;
+  @Nullable private final VideoPlayer videoPlayer;
   private SurfaceHolder.Callback surfaceCallback;
 
   /**
@@ -33,10 +36,21 @@ public final class PlatformVideoView implements PlatformView {
    */
   @OptIn(markerClass = UnstableApi.class)
   public PlatformVideoView(@NonNull Context context, @NonNull ExoPlayer exoPlayer) {
+    this(context, exoPlayer, null);
+  }
+
+  public PlatformVideoView(@NonNull Context context, @NonNull VideoPlayer videoPlayer) {
+    this(context, videoPlayer.getExoPlayer(), videoPlayer);
+  }
+
+  @OptIn(markerClass = UnstableApi.class)
+  private PlatformVideoView(@NonNull Context context, @NonNull ExoPlayer exoPlayer,
+      @Nullable VideoPlayer videoPlayer) {
     this.exoPlayer = exoPlayer;
+    this.videoPlayer = videoPlayer;
     this.surfaceView = new VideoSurfaceView(context, exoPlayer);
 
-    setupSurfaceWithCallback(exoPlayer);
+    setupSurfaceWithCallback(exoPlayer, videoPlayer);
 
     if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) {
       // Avoid blank space instead of a video on Android versions below 8 by adjusting video's
@@ -45,12 +59,14 @@ public final class PlatformVideoView implements PlatformView {
     }
   }
 
-  private void setupSurfaceWithCallback(@NonNull ExoPlayer exoPlayer) {
+  private void setupSurfaceWithCallback(@NonNull ExoPlayer exoPlayer,
+      @Nullable VideoPlayer videoPlayer) {
     surfaceCallback =
         new SurfaceHolder.Callback() {
           @Override
           public void surfaceCreated(@NonNull SurfaceHolder holder) {
             bindPlayerToSurface(exoPlayer, holder.getSurface());
+            if (videoPlayer != null) videoPlayer.setFrameCaptureSurface(holder.getSurface());
             forceFirstFrameForAndroid9(exoPlayer);
           }
 
@@ -60,6 +76,7 @@ public final class PlatformVideoView implements PlatformView {
 
           @Override
           public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
+            if (videoPlayer != null) videoPlayer.clearFrameCaptureSurface(holder.getSurface());
             exoPlayer.clearVideoSurface(holder.getSurface());
           }
         };
@@ -120,6 +137,9 @@ public final class PlatformVideoView implements PlatformView {
   /** Disposes of the resources used by this PlatformView. */
   @Override
   public void dispose() {
+    if (videoPlayer != null) {
+      videoPlayer.clearFrameCaptureSurface(surfaceView.getHolder().getSurface());
+    }
     surfaceView.getHolder().removeCallback(surfaceCallback);
     exoPlayer.clearVideoSurface(surfaceView.getHolder().getSurface());
     surfaceView.setVisibility(View.GONE);

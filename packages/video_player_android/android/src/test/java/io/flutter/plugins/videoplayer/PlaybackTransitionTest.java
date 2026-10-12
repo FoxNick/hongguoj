@@ -210,4 +210,142 @@ public class PlaybackTransitionTest {
     transition.dispose();
     verifyNoMoreInteractions(result);
   }
+  private long generation() {
+    return (Long) transition.snapshot().get("transitionGeneration");
+  }
+
+  @Test
+  public void frameWaitSurvivesReadyFallbackAndOnlyCompletesForMatchingTarget() {
+    transition.replace(source, result);
+    long generation = generation();
+    AnalyticsListener listener = listener();
+    ready(listener);
+    ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+    MethodChannel.Result frameReply = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation, frameReply);
+    verifyNoInteractions(frameReply);
+    MediaItem stale = item.buildUpon().setMediaId("stale").build();
+    listener.onRenderedFirstFrame(time(stale), new Object(), 0);
+    ShadowLooper.idleMainLooper(100, TimeUnit.MILLISECONDS);
+    verifyNoInteractions(frameReply);
+    frame(listener);
+    verify(frameReply).success(argThat(value ->
+        Boolean.TRUE.equals(((Map<?, ?>) value).get("firstFrame"))
+            && ((Long) ((Map<?, ?>) value).get("generation")) == generation));
+    frame(listener);
+    ShadowLooper.idleMainLooper(8, TimeUnit.SECONDS);
+    verifyNoMoreInteractions(frameReply);
+    verify(result, times(1)).success(any());
+  }
+
+  @Test
+  public void completedFrameIsAvailableOnlyUntilReplacementOrDispose() {
+    transition.replace(source, result);
+    long completed = generation();
+    AnalyticsListener first = listener();
+    ready(first);
+    frame(first);
+    MethodChannel.Result alreadyRendered = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(completed, alreadyRendered);
+    verify(alreadyRendered).success(argThat(value ->
+        Boolean.TRUE.equals(((Map<?, ?>) value).get("firstFrame"))));
+    MediaItem replacement = item.buildUpon().setMediaId("replacement").build();
+    transition.replace(source(replacement), mock(MethodChannel.Result.class));
+    assertTrue(generation() > completed);
+    MethodChannel.Result stale = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(completed, stale);
+    verify(stale).error(eq("transition_cancelled"), anyString(), isNull());
+    AnalyticsListener latest = listener();
+    latest.onPlaybackStateChanged(time(replacement), Player.STATE_READY);
+    latest.onRenderedFirstFrame(time(replacement), new Object(), 0);
+    transition.dispose();
+    MethodChannel.Result disposed = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), disposed);
+    verify(disposed).error(eq("transition_cancelled"), anyString(), isNull());
+  }
+
+  @Test
+  public void frameWaitDeadlineIsAbsoluteAndLateWaitKeepsTimeoutOutcome() {
+    transition.replace(source, result);
+    AnalyticsListener listener = listener();
+    ready(listener);
+    ShadowLooper.idleMainLooper(7, TimeUnit.SECONDS);
+    MethodChannel.Result frameReply = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), frameReply);
+    verifyNoInteractions(frameReply);
+    ShadowLooper.idleMainLooper(1, TimeUnit.SECONDS);
+    verify(frameReply).error(eq("transition_timeout"), anyString(), isNull());
+    MethodChannel.Result late = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), late);
+    verify(late).error(eq("transition_timeout"), anyString(), isNull());
+    frame(listener);
+    verifyNoMoreInteractions(frameReply, late);
+    verify(result, never()).error(anyString(), anyString(), any());
+  }
+
+  @Test
+  public void replacementCancelsAllPendingFrameWaitsAndRejectsOldCallbacks() {
+    transition.replace(source, result);
+    AnalyticsListener previous = listener();
+    ready(previous);
+    ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+    long previousGeneration = generation();
+    MethodChannel.Result firstWait = mock(MethodChannel.Result.class);
+    MethodChannel.Result secondWait = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(previousGeneration, firstWait);
+    transition.waitForFirstFrame(previousGeneration, secondWait);
+    MediaItem replacement = item.buildUpon().setMediaId("replacement").build();
+    transition.replace(source(replacement), mock(MethodChannel.Result.class));
+    verify(firstWait).error(eq("transition_cancelled"), anyString(), isNull());
+    verify(secondWait).error(eq("transition_cancelled"), anyString(), isNull());
+    MethodChannel.Result latestWait = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), latestWait);
+    frame(previous);
+    frame(listener());
+    verifyNoInteractions(latestWait);
+    listener().onRenderedFirstFrame(time(replacement), new Object(), 0);
+    verify(latestWait).success(any());
+    verifyNoMoreInteractions(firstWait, secondWait);
+    transition.dispose();
+  }
+
+  @Test
+  public void errorsAndDisposalCompleteFrameWaitExactlyOnceAfterReady() {
+    transition.replace(source, result);
+    AnalyticsListener listener = listener();
+    ready(listener);
+    ShadowLooper.idleMainLooper(250, TimeUnit.MILLISECONDS);
+    MethodChannel.Result frameReply = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), frameReply);
+    listener.onPlayerError(time(item), new PlaybackException("synthetic", null, 1000));
+    verify(frameReply).error(eq("transition_failed"), anyString(), isNull());
+    MethodChannel.Result late = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), late);
+    verify(late).error(eq("transition_failed"), anyString(), isNull());
+    frame(listener);
+    transition.dispose();
+    ShadowLooper.idleMainLooper(8, TimeUnit.SECONDS);
+    verifyNoMoreInteractions(frameReply, late);
+    transition = new PlaybackTransition(player);
+    transition.replace(source, mock(MethodChannel.Result.class));
+    MethodChannel.Result disposedWait = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(generation(), disposedWait);
+    transition.dispose();
+    verify(disposedWait).error(eq("transition_cancelled"), anyString(), isNull());
+    ShadowLooper.idleMainLooper(8, TimeUnit.SECONDS);
+    verifyNoMoreInteractions(disposedWait);
+  }
+
+  @Test
+  public void unknownAndNonpositiveGenerationsCannotObserveCurrentFrame() {
+    transition.replace(source, result);
+    ready(listener());
+    frame(listener());
+    MethodChannel.Result invalid = mock(MethodChannel.Result.class);
+    transition.waitForFirstFrame(0, invalid);
+    transition.waitForFirstFrame(generation() + 1, invalid);
+    verify(invalid, times(2)).error(eq("transition_cancelled"), anyString(), isNull());
+    verify(invalid, never()).success(any());
+  }
+
 }

@@ -28,6 +28,7 @@ class TransportFixture {
   Future<void> mount(
     WidgetTester tester, {
     Size size = const Size(960, 540),
+    bool fullscreen = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -81,7 +82,7 @@ class TransportFixture {
                     player: player,
                     interactions: interactions,
                     enabled: enabled,
-                    fullscreen: true,
+                    fullscreen: fullscreen,
                     showOnPlaybackReady: true,
                     swipeEnabled: true,
                     title: '合成视频 · 播放按钮验证',
@@ -230,6 +231,116 @@ void main() {
     await tester.tap(forward);
     await tester.pump();
     expect(fixture.seeks, [const Duration(seconds: 44)]);
+    expect(tester.takeException(), isNull);
+    await fixture.unmount(tester);
+  });
+
+  testWidgets(
+    'portrait forward follows play and preserves seek bounds and pause intent',
+    (tester) async {
+      final fixture = TransportFixture();
+      await fixture.mount(
+        tester,
+        size: const Size(390, 844),
+        fullscreen: false,
+      );
+      final play = tester.getRect(
+        find.byKey(const ValueKey('player-mobile-play')),
+      );
+      final jump = tester.getRect(forward);
+      expect(jump.left, play.right);
+      expect(jump.center.dy, play.center.dy);
+      expect(jump.size, const Size(48, 48));
+      expect(next, findsNothing);
+      final semantics = tester.ensureSemantics();
+      final data = tester.getSemantics(forward).getSemanticsData();
+      expect(data.label, contains('快进15秒'));
+      expect(data.hasAction(ui.SemanticsAction.tap), isTrue);
+      await tester.tap(forward);
+      await tester.pump();
+      await tester.tap(forward);
+      await tester.pump();
+      expect(fixture.seeks, [
+        const Duration(seconds: 44),
+        const Duration(seconds: 59),
+      ]);
+      expect(fixture.platform.state.playing, isFalse);
+      await fixture.player.playOrPause();
+      await tester.pump();
+      await tester.tap(forward);
+      await tester.pump();
+      expect(fixture.seeks.last, const Duration(seconds: 74));
+      expect(fixture.platform.state.playing, isTrue);
+      await fixture.player.seek(const Duration(seconds: 115));
+      await fixture.player.pause();
+      await tester.pump();
+      await tester.tap(forward);
+      await tester.pump();
+      await tester.tap(forward);
+      await tester.pump();
+      expect(fixture.seeks.sublist(3), [
+        const Duration(seconds: 120),
+        const Duration(seconds: 120),
+      ]);
+      expect(fixture.platform.state.playing, isFalse);
+      expect(fixture.nextCalls, 0);
+      semantics.dispose();
+      expect(tester.takeException(), isNull);
+      await fixture.unmount(tester);
+    },
+  );
+
+  testWidgets('portrait unknown duration and loading disable forward', (
+    tester,
+  ) async {
+    final fixture = TransportFixture();
+    await fixture.mount(tester, size: const Size(390, 844), fullscreen: false);
+    fixture.platform.state = fixture.platform.state.copyWith(
+      duration: Duration.zero,
+    );
+    fixture.rebuild(() {});
+    await tester.pump();
+    expect(tester.widget<GestureDetector>(forward).onTap, isNull);
+    await tester.tapAt(tester.getCenter(forward));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(fixture.seeks, isEmpty);
+    expect(fixture.platform.state.playing, isFalse);
+    fixture.platform.state = fixture.platform.state.copyWith(
+      duration: const Duration(minutes: 2),
+    );
+    fixture.rebuild(() => fixture.enabled = false);
+    await tester.pump();
+    expect(tester.widget<GestureDetector>(forward).onTap, isNull);
+    await tester.tapAt(tester.getCenter(forward));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(fixture.seeks, isEmpty);
+    expect(fixture.platform.state.playing, isFalse);
+    fixture.rebuild(() => fixture.enabled = true);
+    await tester.pump();
+    await tester.tap(forward);
+    await tester.pump();
+    expect(fixture.seeks, [const Duration(seconds: 44)]);
+    expect(tester.takeException(), isNull);
+    await fixture.unmount(tester);
+  });
+
+  testWidgets('portrait screen lock blocks forward until unlocked', (
+    tester,
+  ) async {
+    final fixture = TransportFixture();
+    await fixture.mount(tester, size: const Size(390, 844), fullscreen: false);
+    final jump = tester.getCenter(forward);
+    await tester.tap(find.byTooltip('锁定屏幕'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(jump);
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(fixture.seeks, isEmpty);
+    await tester.tap(find.byTooltip('解锁屏幕'));
+    await tester.pumpAndSettle();
+    await tester.tap(forward);
+    await tester.pump();
+    expect(fixture.seeks, [const Duration(seconds: 44)]);
+    expect(fixture.platform.state.playing, isFalse);
     expect(tester.takeException(), isNull);
     await fixture.unmount(tester);
   });

@@ -324,6 +324,37 @@ void main() {
     },
   );
 
+  testWidgets(
+    'portrait forward uses the existing screen seek and pause intent',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        final repository = RouteRepository();
+        final player = ScriptedPlayer();
+        await mount(tester, repository, player, size: const Size(390, 844));
+        player.videoSize(1920, 1080);
+        await settleOperations(tester);
+        await tester.tap(find.byKey(const ValueKey('player-mobile-play')));
+        await settleOperations(tester);
+        expect(player.state.playing, isFalse);
+        final forward = find.byKey(const ValueKey('player-mobile-forward'));
+        await tester.tap(forward);
+        await settleOperations(tester);
+        expect(player.state.position, const Duration(seconds: 22));
+        await tester.tap(forward);
+        await settleOperations(tester);
+        expect(player.state.position, const Duration(seconds: 37));
+        expect(player.state.playing, isFalse);
+        expect(player.opened.length, 1);
+        expect(find.byKey(const ValueKey('player-mobile-next')), findsNothing);
+        await capture(tester, 'portrait-forward-fifteen');
+        await unmount(tester, player);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
   testWidgets('mobile player pane starts below the system status area', (
     tester,
   ) async {

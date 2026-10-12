@@ -70,7 +70,7 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
     diagnosticChannel.setMethodCallHandler((call, result) -> {
       if (!call.method.equals("snapshot") && !call.method.equals("transition")
           && !call.method.equals("prepareNext") && !call.method.equals("clearNext")
-          && !call.method.equals("captureFrame")) {
+          && !call.method.equals("captureFrame") && !call.method.equals("waitForFirstFrame")) {
         result.notImplemented();
         return;
       }
@@ -84,14 +84,21 @@ public class VideoPlayerPlugin implements FlutterPlugin, AndroidVideoPlayerApi {
         result.error("player_unavailable", "播放器已释放", null);
         return;
       }
+      if (call.method.equals("waitForFirstFrame")) {
+        Number generation = call.argument("generation");
+        player.waitForFirstFrame(generation == null ? 0L : generation.longValue(), result);
+        return;
+      }
       if (call.method.equals("captureFrame")) {
         int mode = flutterState.applicationContext.getResources().getConfiguration().uiMode;
-        if ((mode & android.content.res.Configuration.UI_MODE_TYPE_MASK)
-            == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) {
+        boolean television = (mode & android.content.res.Configuration.UI_MODE_TYPE_MASK)
+            == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
+        if (television && !Boolean.TRUE.equals(call.argument("allowTelevision"))) {
           result.success(null);
           return;
         }
-        player.captureFrame(result);
+        player.captureFrame(television ? FrameCapture.TELEVISION_MAX_EDGE
+            : FrameCapture.MAX_EDGE, result);
         return;
       }
       if (call.method.equals("snapshot")) {

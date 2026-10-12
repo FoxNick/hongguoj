@@ -137,4 +137,30 @@ public class PlatformVideoViewTest {
     verify(exoPlayer).setVideoSurface(mockSurface);
     verify(exoPlayer, never()).seekTo(anyLong());
   }
+  @Test
+  @Config(sdk = 34)
+  public void surfaceLifecycleRegistersAndClearsCaptureWithoutOwningSurface() {
+    Context context = ApplicationProvider.getApplicationContext();
+    VideoPlayer player = mock(VideoPlayer.class);
+    ExoPlayer exoPlayer = mock(ExoPlayer.class);
+    when(player.getExoPlayer()).thenReturn(exoPlayer);
+    PlatformVideoView view = new PlatformVideoView(context, player);
+    SurfaceView surfaceView = (SurfaceView) view.getView();
+    SurfaceHolder.Callback callback = Shadows.shadowOf(surfaceView)
+        .getFakeSurfaceHolder().getCallbacks().iterator().next();
+    Surface surface = mock(Surface.class);
+    when(surface.isValid()).thenReturn(true);
+    SurfaceHolder holder = mock(SurfaceHolder.class);
+    when(holder.getSurface()).thenReturn(surface);
+    callback.surfaceCreated(holder);
+    verify(player).setFrameCaptureSurface(surface);
+    callback.surfaceDestroyed(holder);
+    verify(player).clearFrameCaptureSurface(surface);
+    verify(exoPlayer).clearVideoSurface(surface);
+    view.dispose();
+    verify(player).clearFrameCaptureSurface(surfaceView.getHolder().getSurface());
+    verify(surface, never()).release();
+    verify(exoPlayer, never()).release();
+  }
+
 }

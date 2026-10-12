@@ -13,6 +13,7 @@ import java.util.function.BooleanSupplier;
 
 final class FrameCapture {
   static final int MAX_EDGE = 960;
+  static final int TELEVISION_MAX_EDGE = 640;
   static final int MAX_ENCODED_BYTES = 1024 * 1024;
 
   interface Copier {
@@ -56,14 +57,23 @@ final class FrameCapture {
   }
 
   static int[] dimensions(int width, int height) {
-    if (width <= 0 || height <= 0) return null;
-    double scale = Math.min(1.0, (double) MAX_EDGE / Math.max(width, height));
+    return dimensions(width, height, MAX_EDGE);
+  }
+
+  static int[] dimensions(int width, int height, int maxEdge) {
+    if (width <= 0 || height <= 0 || maxEdge <= 0) return null;
+    double scale = Math.min(1.0, (double) Math.min(MAX_EDGE, maxEdge) / Math.max(width, height));
     return new int[] {Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale))};
   }
 
   void capture(Surface surface, int width, int height, BooleanSupplier valid,
       MethodChannel.Result reply) {
-    int[] size = dimensions(width, height);
+    capture(surface, width, height, MAX_EDGE, valid, reply);
+  }
+
+  void capture(Surface surface, int width, int height, int maxEdge, BooleanSupplier valid,
+      MethodChannel.Result reply) {
+    int[] size = dimensions(width, height, maxEdge);
     if (disposed || active != null || surface == null || !surface.isValid()
         || size == null || !valid.getAsBoolean()) {
       reply.success(null);

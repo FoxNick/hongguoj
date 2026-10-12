@@ -8,18 +8,28 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import android.content.Context;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.util.LongSparseArray;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugin.common.MethodCall;
+import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.StandardMethodCodec;
 import io.flutter.plugin.platform.PlatformViewRegistry;
 import io.flutter.plugins.videoplayer.platformview.PlatformVideoViewFactory;
 import io.flutter.plugins.videoplayer.platformview.PlatformViewVideoPlayer;
 import io.flutter.plugins.videoplayer.texture.TextureVideoPlayer;
 import io.flutter.view.TextureRegistry;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
@@ -31,6 +41,8 @@ public class VideoPlayerPluginTest {
   @Mock private TextureRegistry.SurfaceProducer mockSurfaceProducer;
   @Mock private PlatformViewRegistry mockPlatformViewRegistry;
   private VideoPlayerPlugin plugin;
+  private BinaryMessenger messenger;
+  private Configuration configuration;
 
   @Before
   public void setUp() {
@@ -38,10 +50,15 @@ public class VideoPlayerPluginTest {
     when(mockTextureRegistry.createSurfaceProducer()).thenReturn(mockSurfaceProducer);
 
     FlutterPlugin.FlutterPluginBinding binding = mock(FlutterPlugin.FlutterPluginBinding.class);
-    when(binding.getApplicationContext()).thenReturn(mock(Context.class));
+    Context context = mock(Context.class);
+    Resources resources = mock(Resources.class);
+    configuration = new Configuration();
+    when(context.getResources()).thenReturn(resources);
+    when(resources.getConfiguration()).thenReturn(configuration);
+    when(binding.getApplicationContext()).thenReturn(context);
     when(binding.getTextureRegistry()).thenReturn(mockTextureRegistry);
-    when(binding.getBinaryMessenger())
-        .thenReturn(mock(io.flutter.plugin.common.BinaryMessenger.class));
+    messenger = mock(BinaryMessenger.class);
+    when(binding.getBinaryMessenger()).thenReturn(messenger);
     when(binding.getPlatformViewRegistry()).thenReturn(mockPlatformViewRegistry);
 
     plugin = new VideoPlayerPlugin();
@@ -112,5 +129,58 @@ public class VideoPlayerPluginTest {
       final LongSparseArray<VideoPlayer> videoPlayers = getVideoPlayers();
       assertTrue(videoPlayers.get(ids.getPlayerId()) instanceof TextureVideoPlayer);
     }
+  }
+
+  private Object diagnostics(String method, Map<String, Object> arguments) {
+    ArgumentCaptor<BinaryMessenger.BinaryMessageHandler> captor =
+        ArgumentCaptor.forClass(BinaryMessenger.BinaryMessageHandler.class);
+    verify(messenger).setMessageHandler(eq("hongguo/video_diagnostics"), captor.capture());
+    ByteBuffer call = StandardMethodCodec.INSTANCE.encodeMethodCall(new MethodCall(method, arguments));
+    call.rewind();
+    AtomicReference<Object> value = new AtomicReference<>();
+    captor.getValue().onMessage(call, reply -> {
+      reply.rewind();
+      value.set(StandardMethodCodec.INSTANCE.decodeEnvelope(reply));
+    });
+    return value.get();
+  }
+
+  @Test
+  public void televisionCaptureRequiresExplicitOptInAndUsesReducedBound() throws Exception {
+    configuration.uiMode = Configuration.UI_MODE_TYPE_TELEVISION;
+    VideoPlayer player = mock(VideoPlayer.class);
+    getVideoPlayers().put(42L, player);
+    Map<String, Object> arguments = new HashMap<>();
+    arguments.put("playerId", 42L);
+    assertNull(diagnostics("captureFrame", arguments));
+    verify(player, never()).captureFrame(anyInt(), any());
+    arguments.put("allowTelevision", true);
+    diagnostics("captureFrame", arguments);
+    verify(player).captureFrame(eq(640), any(MethodChannel.Result.class));
+  }
+
+  @Test
+  public void phoneCaptureKeepsOriginalBound() throws Exception {
+    configuration.uiMode = Configuration.UI_MODE_TYPE_NORMAL;
+    VideoPlayer player = mock(VideoPlayer.class);
+    getVideoPlayers().put(42L, player);
+    diagnostics("captureFrame", Map.of("playerId", 42L));
+    verify(player).captureFrame(eq(960), any(MethodChannel.Result.class));
+  }
+
+  @Test
+  public void firstFrameWaitPassesTransitionGenerationWithoutRequiringMediaUrl() throws Exception {
+    VideoPlayer player = mock(VideoPlayer.class);
+    getVideoPlayers().put(42L, player);
+    Map<String, Object> expected = Map.of("firstFrame", true, "generation", 9L);
+    doAnswer(invocation -> {
+      MethodChannel.Result result = invocation.getArgument(1);
+      result.success(expected);
+      return null;
+    }).when(player).waitForFirstFrame(eq(9L), any(MethodChannel.Result.class));
+    assertEquals(expected, diagnostics("waitForFirstFrame", Map.of("playerId", 42L, "generation", 9L)));
+    verify(player).waitForFirstFrame(eq(9L), any(MethodChannel.Result.class));
+    diagnostics("waitForFirstFrame", Map.of("playerId", 42L));
+    verify(player).waitForFirstFrame(eq(0L), any(MethodChannel.Result.class));
   }
 }

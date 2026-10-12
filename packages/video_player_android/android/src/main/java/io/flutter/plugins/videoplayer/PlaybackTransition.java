@@ -14,7 +14,9 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.MediaSource;
 import io.flutter.plugin.common.MethodChannel;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @UnstableApi
@@ -22,6 +24,11 @@ final class PlaybackTransition {
   final ExoPlayer player;
   final Handler handler = new Handler(Looper.getMainLooper());
   Attempt active;
+  long generation;
+  private boolean disposed;
+  boolean renderedFirstFrame;
+  String frameErrorCode = "transition_cancelled";
+  String frameErrorMessage = "切集已失效";
   final Map<String, Object> lastMetrics = new HashMap<>();
 
   PlaybackTransition(ExoPlayer player) {
@@ -38,13 +45,23 @@ final class PlaybackTransition {
 
   void replace(MediaSource source, PreparedNext.Selection prepared, long requestElapsedMs,
       MethodChannel.Result reply) {
+    if (disposed) {
+      if (prepared != null) prepared.release();
+      reply.error("transition_cancelled", "播放器已释放", null);
+      return;
+    }
     if (active != null) active.fail("transition_cancelled", "切集已被替换");
+    generation++;
+    renderedFirstFrame = false;
+    frameErrorCode = "transition_cancelled";
+    frameErrorMessage = "切集已失效";
     Attempt attempt = new Attempt(source.getMediaItem(), prepared, requestElapsedMs, reply);
     active = attempt;
     lastMetrics.clear();
     lastMetrics.put("transitionUsedPrepared", prepared != null);
     lastMetrics.put("transitionPreloadReady", prepared != null && prepared.ready);
     lastMetrics.put("transitionFirstFrame", false);
+    lastMetrics.put("transitionGeneration", generation);
     player.addAnalyticsListener(attempt);
     handler.postDelayed(attempt.timeout, 8000);
     try {
@@ -60,12 +77,35 @@ final class PlaybackTransition {
     return new HashMap<>(lastMetrics);
   }
 
+  void waitForFirstFrame(long requestedGeneration, MethodChannel.Result reply) {
+    if (disposed || requestedGeneration <= 0 || requestedGeneration != generation) {
+      reply.error("transition_cancelled", "切集已失效", null);
+    } else if (renderedFirstFrame) {
+      reply.success(frameResult(generation));
+    } else if (active != null) {
+      active.frameReplies.add(reply);
+    } else {
+      reply.error(frameErrorCode, frameErrorMessage, null);
+    }
+  }
+
+  static Map<String, Object> frameResult(long generation) {
+    Map<String, Object> values = new HashMap<>();
+    values.put("firstFrame", true);
+    values.put("generation", generation);
+    return values;
+  }
+
   void dispose() {
+    disposed = true;
+    renderedFirstFrame = false;
     if (active != null) active.fail("transition_cancelled", "播放器已释放");
   }
 
   private final class Attempt implements AnalyticsListener {
     final MediaItem item;
+    final long transitionGeneration = generation;
+    final List<MethodChannel.Result> frameReplies = new ArrayList<>();
     final PreparedNext.Selection prepared;
     final long requestElapsedMs;
     final long startedAt = SystemClock.elapsedRealtime();
@@ -110,10 +150,16 @@ final class PlaybackTransition {
     public void onRenderedFirstFrame(EventTime eventTime, Object output, long renderTimeMs) {
       if (!matches(eventTime) || firstFrame) return;
       firstFrame = true;
+      renderedFirstFrame = true;
       firstFrameElapsedMs = SystemClock.elapsedRealtime() - startedAt;
       lastMetrics.put("transitionFirstFrame", true);
       lastMetrics.put("transitionFirstFrameMs", firstFrameElapsedMs);
       lastMetrics.put("transitionRequestFirstFrameMs", requestElapsedMs + firstFrameElapsedMs);
+      List<MethodChannel.Result> replies = new ArrayList<>(frameReplies);
+      frameReplies.clear();
+      for (MethodChannel.Result reply : replies) {
+        reply.success(frameResult(transitionGeneration));
+      }
       if (result == null) clear();
       else finishIfReady();
     }
@@ -148,6 +194,7 @@ final class PlaybackTransition {
       values.put("preloadReady", prepared != null && prepared.ready);
       values.put("preloadElapsedMs", prepared == null ? 0L : prepared.elapsedMs);
       values.put("generation", prepared == null ? 0L : prepared.generation);
+      values.put("transitionGeneration", transitionGeneration);
       lastMetrics.put("transitionReadyMs", elapsedMs);
       lastMetrics.put("transitionRequestReadyMs", requestElapsedMs + elapsedMs);
       MethodChannel.Result reply = result;
@@ -162,8 +209,14 @@ final class PlaybackTransition {
       if (active != this) return;
       MethodChannel.Result reply = result;
       result = null;
+      renderedFirstFrame = false;
+      frameErrorCode = code;
+      frameErrorMessage = message;
+      List<MethodChannel.Result> replies = new ArrayList<>(frameReplies);
+      frameReplies.clear();
       clear();
       if (reply != null) reply.error(code, message, null);
+      for (MethodChannel.Result frameReply : replies) frameReply.error(code, message, null);
     }
 
     private void clear() {

@@ -166,4 +166,19 @@ public class FrameCaptureTest {
     assertArrayEquals(new int[] {1, 960}, FrameCapture.dimensions(1, Integer.MAX_VALUE));
     assertArrayEquals(new int[] {240, 160}, FrameCapture.dimensions(240, 160));
   }
+  @Test
+  public void televisionCaptureHasSmallerBoundAndDoesNotUpscale() {
+    capture.capture(surface, 3840, 2160, FrameCapture.TELEVISION_MAX_EDGE, valid::get, result);
+    assertEquals(640, bitmap.getWidth());
+    assertEquals(360, bitmap.getHeight());
+    assertEquals(921600, bitmap.getAllocationByteCount());
+    copyResult.onPixelCopyFinished(PixelCopy.SUCCESS);
+    encode();
+    verify(result).success(aryEq(new byte[] {1, 2, 3}));
+    assertArrayEquals(new int[] {360, 640}, FrameCapture.dimensions(2160, 3840, 640));
+    assertArrayEquals(new int[] {240, 160}, FrameCapture.dimensions(240, 160, 640));
+    assertArrayEquals(new int[] {960, 540}, FrameCapture.dimensions(1920, 1080, 2000));
+    assertNull(FrameCapture.dimensions(1920, 1080, 0));
+  }
+
 }

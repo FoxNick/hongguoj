@@ -12,6 +12,7 @@ import 'package:media_kit/src/player/platform_player.dart';
 import 'package:video_player/video_player.dart';
 
 import 'diary_service.dart';
+import 'playback_frame_hold.dart';
 
 /// 模拟与 media_kit.PlayerStream 接口对齐的流集合
 class LunaPlayerStreams implements PlayerStream {
@@ -152,6 +153,9 @@ class LunaExoPlayer implements Player {
   DateTime _prepareRetryAt = DateTime(2000);
   bool lastTransitionUsedPrepared = false;
   bool lastTransitionFirstFrame = false;
+  final frameHold = PlaybackFrameHold();
+  final frameHoldFailure = ValueNotifier<String?>(null);
+  int _frameRetentionSequence = 0;
 
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
@@ -193,18 +197,21 @@ class LunaExoPlayer implements Player {
     return headers;
   }
 
-  Future<Uint8List?> captureFrame() async {
+  Future<Uint8List?> captureFrame({bool allowTelevision = false}) async {
     final c = _controller;
     if (!canTransition ||
         c == null ||
-        television?.call() == true ||
+        (television?.call() == true && !allowTelevision) ||
         c.value.rotationCorrection != 0) {
       return null;
     }
     final generation = _openGeneration;
     try {
       final bytes = await diagnosticChannel
-          .invokeMethod<Uint8List>('captureFrame', {'playerId': c.playerId})
+          .invokeMethod<Uint8List>('captureFrame', {
+            'playerId': c.playerId,
+            if (allowTelevision) 'allowTelevision': true,
+          })
           .timeout(const Duration(milliseconds: 180), onTimeout: () => null);
       if (_disposed ||
           generation != _openGeneration ||
@@ -216,6 +223,90 @@ class LunaExoPlayer implements Player {
       return bytes;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<bool> retainCurrentFrame() async {
+    clearRetainedFrame();
+    if (!canTransition) return false;
+    final sequence = _frameRetentionSequence;
+    final generation = _openGeneration;
+    final c = _controller;
+    final captured = await frameHold.capture(
+      () => captureFrame(allowTelevision: true),
+    );
+    if (_disposed || sequence != _frameRetentionSequence) return false;
+    if (generation != _openGeneration || c != _controller) {
+      clearRetainedFrame();
+      return false;
+    }
+    if (!captured) return false;
+    await SchedulerBinding.instance.endOfFrame.timeout(
+      const Duration(milliseconds: 50),
+      onTimeout: () {},
+    );
+    return !_disposed &&
+        sequence == _frameRetentionSequence &&
+        generation == _openGeneration &&
+        c == _controller &&
+        frameHold.active;
+  }
+
+  void clearRetainedFrame() {
+    ++_frameRetentionSequence;
+    frameHold.clear();
+    frameHoldFailure.value = null;
+  }
+
+  Future<void> _waitForTransitionFrame(
+    VideoPlayerController c,
+    int generation,
+    int nativeGeneration,
+    int retentionSequence,
+  ) async {
+    bool current() =>
+        !_disposed &&
+        c == _controller &&
+        generation == _openGeneration &&
+        retentionSequence == _frameRetentionSequence;
+    try {
+      final result = await diagnosticChannel
+          .invokeMapMethod<String, dynamic>('waitForFirstFrame', {
+            'playerId': c.playerId,
+            'generation': nativeGeneration,
+          })
+          .timeout(const Duration(seconds: 9));
+      if (!current()) return;
+      if (result?['firstFrame'] != true ||
+          result?['generation'] != nativeGeneration) {
+        throw StateError('下一集首帧未得到确认');
+      }
+      lastTransitionFirstFrame = true;
+      clearRetainedFrame();
+      DiaryService.add(
+        '[FrameHold] target first frame, generation=$nativeGeneration',
+      );
+    } catch (error) {
+      if (!current()) return;
+      clearRetainedFrame();
+      DiaryService.add(
+        '[FrameHold] released without target frame, generation=$nativeGeneration: $error',
+      );
+      if (error is PlatformException && error.code == 'transition_cancelled') {
+        return;
+      }
+      frameHoldFailure.value = '下一集画面加载失败，正在尝试恢复…';
+      final failureSequence = _frameRetentionSequence;
+      try {
+        await c.pause().timeout(const Duration(seconds: 2));
+      } catch (_) {}
+      if (_disposed ||
+          c != _controller ||
+          generation != _openGeneration ||
+          failureSequence != _frameRetentionSequence) {
+        return;
+      }
+      _reportControllerError(c, '下一集画面加载失败，请重试');
     }
   }
 
@@ -298,10 +389,13 @@ class LunaExoPlayer implements Player {
     String identity = '',
     String mediaType = '',
     int requestElapsedMs = 0,
+    bool retainPreviousFrame = false,
   }) async {
+    if (!retainPreviousFrame) clearRetainedFrame();
     if (!canTransition) return open(media, play: play, mediaType: mediaType);
     final c = _controller!;
     final ticket = ++_openGeneration;
+    final retentionSequence = _frameRetentionSequence;
     final clock = Stopwatch()..start();
     _transitioning = true;
     _transitionWantsPlay = play;
@@ -384,6 +478,24 @@ class LunaExoPlayer implements Player {
         await c.play().timeout(const Duration(seconds: 3));
       }
       _onControllerValue(c);
+      if (retainPreviousFrame && frameHold.active) {
+        final nativeGeneration = (result['transitionGeneration'] as num?)
+            ?.toInt();
+        if (lastTransitionFirstFrame) {
+          clearRetainedFrame();
+        } else if (nativeGeneration != null && nativeGeneration > 0) {
+          unawaited(
+            _waitForTransitionFrame(
+              c,
+              ticket,
+              nativeGeneration,
+              retentionSequence,
+            ),
+          );
+        } else {
+          clearRetainedFrame();
+        }
+      }
       revision.value++;
       DiaryService.add(
         '[Transition] reused player=${c.playerId}, readyMs=${clock.elapsedMilliseconds}, firstFrame=${result['firstFrame']}, nativeMs=${result['elapsedMs']}, usedPrepared=${result['usedPrepared']}, preloadReady=${result['preloadReady']}',
@@ -391,6 +503,7 @@ class LunaExoPlayer implements Player {
     } catch (error) {
       if (_disposed || ticket != _openGeneration) return;
       _transitioning = false;
+      clearRetainedFrame();
       if (!reopenOnFailure) {
         DiaryService.add('[Transition] 预取交接失败，交由重新取址: $error');
         rethrow;
@@ -894,6 +1007,7 @@ class LunaExoPlayer implements Player {
   }
 
   Future<void> _releaseController() async {
+    clearRetainedFrame();
     ++_prepareGeneration;
     _preparedIdentity = _preparedUrl = _preparedMediaType = null;
     _preparedHeaders = null;
@@ -930,6 +1044,7 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> pause() async {
+    clearRetainedFrame();
     if (_transitioning) {
       _transitionWantsPlay = false;
       return;
@@ -954,6 +1069,7 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> seek(Duration target) async {
+    clearRetainedFrame();
     final c = _controller;
     if (c == null) return;
     try {
@@ -1018,6 +1134,8 @@ class LunaExoPlayer implements Player {
     _disposed = true;
     ++_openGeneration;
     await _releaseController();
+    frameHold.dispose();
+    frameHoldFailure.dispose();
     stream.dispose();
   }
 

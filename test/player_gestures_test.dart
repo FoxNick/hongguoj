@@ -323,13 +323,25 @@ void main() {
         expect(a.center.dy, b.center.dy);
         final forward = find.byKey(const ValueKey('player-mobile-forward'));
         final next = find.byKey(const ValueKey('player-mobile-next'));
+        expect(tester.getRect(forward).left, b.right);
+        expect(tester.getRect(forward).center.dy, b.center.dy);
+        expect(tester.getRect(forward).size, const Size(48, 48));
         if (size.width > size.height) {
-          expect(tester.getRect(forward).left, b.right);
           expect(tester.getRect(next).left, tester.getRect(forward).right);
         } else {
-          expect(forward, findsNothing);
           expect(next, findsNothing);
         }
+        final speed = tester.getRect(
+          find.byKey(const ValueKey('player-speed')),
+        );
+        final pictureInPicture = tester.getRect(
+          find.byKey(const ValueKey('player-picture-in-picture')),
+        );
+        expect(pictureInPicture.right, lessThanOrEqualTo(size.width));
+        expect(
+          speed.center.dy,
+          size.width < 348 ? greaterThan(b.center.dy) : b.center.dy,
+        );
         expect(tester.getRect(toggle).bottom, lessThan(100));
         final header = tester.widget<Text>(
           find.byKey(const ValueKey('player-header-title')),

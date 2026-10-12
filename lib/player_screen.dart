@@ -251,6 +251,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                   logLevel: MPVLogLevel.error,
                 ),
               ));
+    if (_player is LunaExoPlayer) {
+      _player.frameHold.addListener(_retainedFrameChanged);
+    }
     _video = widget.videoBuilder == null && !Platform.isAndroid
         ? VideoController(
             _player,
@@ -1198,6 +1201,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     return next;
   }
 
+  bool get _hasRetainedFrame =>
+      _player is LunaExoPlayer && _player.frameHold.active;
+
+  void _retainedFrameChanged() {
+    if (!mounted || _closed) return;
+    setState(() {
+      if (!_loading && !_hasRetainedFrame) {
+        _transitionWaitTimer?.cancel();
+        _smoothTransition = false;
+        _transitionWaitVisible = false;
+      }
+    });
+  }
+
   Future<void> _play(
     int index, {
     DramaDetail? nextDetail,
@@ -1230,6 +1247,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         _player is LunaExoPlayer &&
         _player.canTransition;
     final pausedPrevious = smooth ? _player.pause() : Future<void>.value();
+    final retainPreviousFrame = automaticAdvance && smooth;
+    final frameReady = retainPreviousFrame
+        ? _player.retainCurrentFrame()
+        : Future<bool>.value(false);
+    if (!retainPreviousFrame && _player is LunaExoPlayer) {
+      _player.clearRetainedFrame();
+    }
     _interactions.cancel();
     if (widget.handoff != null &&
         handoffPlan == null &&
@@ -1264,7 +1288,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     _transitionWaitVisible = false;
     if (smooth) {
       _transitionWaitTimer = Timer(const Duration(milliseconds: 700), () {
-        if (mounted && !_closed && ticket == _generation && _loading) {
+        if (mounted &&
+            !_closed &&
+            ticket == _generation &&
+            (_loading || _hasRetainedFrame)) {
           setState(() => _transitionWaitVisible = true);
         }
       });
@@ -1322,6 +1349,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           return;
         }
         await pausedPrevious;
+        await frameReady;
+        if (_closed || ticket != _generation) return;
         if (smooth) {
           unawaited(_saveProgress(flush: true));
         } else {
@@ -1461,6 +1490,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             identity: plan.session,
             mediaType: plan.mediaType,
             requestElapsedMs: switchClock.elapsedMilliseconds,
+            retainPreviousFrame: retainPreviousFrame,
           );
         } else if (_player is LunaExoPlayer) {
           await _player.open(
@@ -1481,10 +1511,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         _health.reset();
         await _interactions.applySpeed();
         if (mounted && !_closed && ticket == _generation) {
-          _transitionWaitTimer?.cancel();
+          if (!_hasRetainedFrame) _transitionWaitTimer?.cancel();
           setState(() {
             _loading = false;
-            _smoothTransition = false;
+            _smoothTransition = _hasRetainedFrame;
           });
           if (_pendingError) _queueRecovery();
           DiaryService.add(
@@ -1501,6 +1531,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       });
     } catch (error) {
       DiaryService.add('[Play] 捕获播放流程错误: $error');
+      if (ticket == _generation && _player is LunaExoPlayer) {
+        _player.clearRetainedFrame();
+      }
       if (!_closed && mounted && ticket == _generation) {
         if (prepared != null && identical(_plan, prepared)) {
           _transitionWaitTimer?.cancel();
@@ -1901,6 +1934,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   void dispose() {
     _transitionWaitTimer?.cancel();
     _closed = true;
+    if (_player is LunaExoPlayer) {
+      _player.frameHold.removeListener(_retainedFrameChanged);
+      _player.clearRetainedFrame();
+    }
     _syncScreenOn();
     _dismissSeasonNotice();
     _setTelevisionPlaybackActive(false);
@@ -2190,7 +2227,39 @@ class _PlayerScreenState extends State<PlayerScreen>
     final layeredControls = Stack(
       fit: StackFit.expand,
       children: [
-        if (!hideOverlayForPictureInPicture)
+        if (_player is LunaExoPlayer)
+          AnimatedBuilder(
+            animation: Listenable.merge([
+              _player.frameHold,
+              _player.frameHoldFailure,
+            ]),
+            builder: (context, _) {
+              final image = _player.frameHold.image;
+              final failure = _player.frameHoldFailure.value;
+              return IgnorePointer(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (image != null)
+                      ColoredBox(
+                        key: const ValueKey('automatic-transition-frame'),
+                        color: Colors.black,
+                        child: RawImage(image: image, fit: BoxFit.contain),
+                      ),
+                    if (failure != null && !hideOverlayForPictureInPicture)
+                      Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(failure),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        if (!hideOverlayForPictureInPicture && !_hasRetainedFrame)
           DanmakuOverlay(
             controller: _danmaku,
             aspectRatio: _aspectRatio,
@@ -2278,7 +2347,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                   ),
                 ),
-              if (_loading &&
+              if ((_loading || _hasRetainedFrame) &&
                   _smoothTransition &&
                   _transitionWaitVisible &&
                   !hideOverlayForPictureInPicture)

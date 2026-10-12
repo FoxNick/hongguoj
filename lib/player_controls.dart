@@ -968,8 +968,10 @@ class _PlayerControlsState extends State<PlayerControls> {
               }
             : null,
       ),
-      if (fullscreen) ...[
-        _toolText(
+      AbsorbPointer(
+        absorbing:
+            !widget.enabled || widget.player.state.duration <= Duration.zero,
+        child: _toolText(
           key: const ValueKey('player-mobile-forward'),
           tooltip: '快进15秒',
           label: '+15s',
@@ -982,6 +984,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                 }
               : null,
         ),
+      ),
+      if (fullscreen)
         _toolIcon(
           key: const ValueKey('player-mobile-next'),
           tooltip: '下一集',
@@ -993,7 +997,6 @@ class _PlayerControlsState extends State<PlayerControls> {
                 }
               : null,
         ),
-      ],
       _toolText(
         key: const ValueKey('player-speed'),
         tooltip: '倍速',
@@ -1027,14 +1030,14 @@ class _PlayerControlsState extends State<PlayerControls> {
               : null,
         ),
     ];
-    final transportCount = fullscreen ? 4 : 2;
+    final transportCount = fullscreen ? 4 : 3;
     final transport = _toolGroup(tools.take(transportCount).toList());
     final options = _toolGroup(tools.skip(transportCount).toList());
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (fullscreen && constraints.maxWidth < tools.length * 48 + 12) {
+          if (constraints.maxWidth < tools.length * 48 + 12) {
             return Column(
               children: [
                 Align(alignment: Alignment.centerLeft, child: transport),

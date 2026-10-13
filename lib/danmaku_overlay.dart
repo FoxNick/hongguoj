@@ -174,7 +174,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
       );
     }
     if (_mobile) {
-      final activeIds = _realtimeFlights.map((flight) => flight.item.id).toSet();
+      final activeIds = _realtimeFlights
+          .map((flight) => flight.item.id)
+          .toSet();
       if (_mobileTimelineRevision != controller.timelineRevision) {
         _mobileTimelineRevision = controller.timelineRevision;
         _realtimeSeen.retainAll(activeIds);
@@ -361,9 +363,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                           measure: measure,
                         );
                       }
-                      final flights = _realtime
-                          ? _realtimeFlights
-                          : _schedule;
+                      final flights = _realtime ? _realtimeFlights : _schedule;
                       final position = _realtime
                           ? _realtimePositionMs
                           : controller.positionMs;
@@ -395,7 +395,10 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
                                       : controller.moving,
                                   rate: _realtime ? 1 : controller.rate,
                                   revision: _mobile
-                                      ? (controller.motionRevision, _realtimeLayout)
+                                      ? (
+                                          controller.motionRevision,
+                                          _realtimeLayout,
+                                        )
                                       : controller.motionRevision,
                                   style: style,
                                   scaler: scaler,

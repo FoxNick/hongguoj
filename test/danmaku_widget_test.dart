@@ -299,6 +299,10 @@ void main() {
       expect(player.opened.length, 1);
       expect(player.state.playing, isTrue);
       expect(find.text('正在准备播放'), findsNothing);
+      expect(
+        tester.widget<DanmakuOverlay>(find.byType(DanmakuOverlay)).mobile,
+        isTrue,
+      );
       final old = repository.danmakuCalls.single;
       await tester.tap(find.byKey(const ValueKey('player-portrait-episodes')));
       await settle(tester);

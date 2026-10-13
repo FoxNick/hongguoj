@@ -2303,6 +2303,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             controller: _danmaku,
             aspectRatio: _aspectRatio,
             television: _television,
+            mobile: _mobile,
           ),
         controls,
         if (!hideOverlayForPictureInPicture && _seasonNotice != null)

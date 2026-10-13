@@ -39,7 +39,12 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get --enforce-lockfile
-      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+      - name: Check formatting and emit repair diff
+        id: formatting
+        continue-on-error: true
+        run: |
+          dart format lib test integration_test test_driver
+          git diff --exit-code -- lib test integration_test test_driver
       - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true
@@ -48,6 +53,10 @@ jobs:
         working-directory: native
       - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
         working-directory: native
+
+      - name: Enforce committed source formatting
+        if: always() && steps.formatting.outcome != 'success'
+        run: exit 1
 
   android-compile:
     runs-on: ubuntu-latest

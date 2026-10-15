@@ -103,7 +103,7 @@ func TestHuangguoMediaUsesBrowserSessionPageRefererAndPreviewToken(t *testing.T)
 	t.Cleanup(manager.close)
 	job := nativeDownloadJob{ID: "synthetic-job", Drama: nativeDrama{ID: task.DramaID, Source: sourceHuangguoVideo}, Index: 1}
 	result, err := manager.transferMedia(context.Background(), job, media)
-	if err != nil || result.file != "index.m3u8" {
+	if err != nil || !nativeDownloadPlaylistFile(result.file) {
 		t.Fatal("download did not reuse media chain", err)
 	}
 	if previews.Load() != 1 || keys.Load() != 2 {
@@ -181,10 +181,10 @@ func TestLegacyPlaybackAndDownloadUseAuthenticatedPlaylistAndSourceKey(t *testin
 	engine.downloads = manager
 	t.Cleanup(manager.close)
 	result, err := manager.transferMedia(context.Background(), nativeDownloadJob{ID: "legacy-fixture"}, media)
-	if err != nil || result.file != "index.m3u8" || keys.Load() != 1 {
+	if err != nil || !nativeDownloadPlaylistFile(result.file) || keys.Load() != 1 {
 		t.Fatal("legacy download failed", err, keys.Load())
 	}
-	if _, err := os.Stat(filepath.Join(manager.root, "legacy-fixture", "index.m3u8")); err != nil {
+	if _, err := os.Stat(filepath.Join(manager.root, "legacy-fixture", result.file)); err != nil {
 		t.Fatal(err)
 	}
 }

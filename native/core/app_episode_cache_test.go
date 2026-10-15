@@ -158,7 +158,11 @@ func testEpisodeCacheHLSResources(t *testing.T, entry string) {
 			t.Fatalf("offline asset unavailable: %s", address)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(directory, "index.m3u8"), []byte("truncated"), 0600); err != nil {
+	playlists, _ := filepath.Glob(filepath.Join(directory, "*.m3u8"))
+	if len(playlists) != 1 {
+		t.Fatalf("unexpected cached playlists: %v", playlists)
+	}
+	if err := os.WriteFile(playlists[0], []byte("truncated"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	broken, _ := http.Get(plan.URL)

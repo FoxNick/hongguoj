@@ -608,6 +608,8 @@ class MediaLibrary extends ChangeNotifier {
         'copy',
         '-movflags',
         '+faststart',
+        '-f',
+        'mp4',
         staged,
       ]);
       final produced = await File(staged).exists()

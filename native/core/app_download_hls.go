@@ -99,7 +99,7 @@ func nativeDownloadAssetName(address, extension string) string {
 	return hex.EncodeToString(digest[:16]) + extension
 }
 
-func (manager *nativeDownloads) downloadBundle(ctx context.Context, media providerMedia, quality int) (nativeDownloadBundle, error) {
+func (manager *nativeDownloads) downloadBundle(ctx context.Context, media providerMedia, quality int, name string) (nativeDownloadBundle, error) {
 	ctx = providerMediaContext(ctx, media.credentials)
 	bundle := nativeDownloadBundle{quality: media.Quality, playlists: map[string][]byte{}, startup: map[string]bool{}}
 	visited := map[string]string{}
@@ -243,7 +243,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 		visited[address] = name
 		return name, nil
 	}
-	_, err := walk(media.URL, media.Playlist, "index.m3u8", 0)
+	_, err := walk(media.URL, media.Playlist, name, 0)
 	if err != nil {
 		return bundle, err
 	}

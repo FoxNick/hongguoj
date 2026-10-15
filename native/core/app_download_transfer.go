@@ -27,8 +27,7 @@ type nativeDownloadAsset struct {
 
 type nativeDownloadBundle struct {
 	assets    []nativeDownloadAsset
-	playlists map[string][]byte
-	quality   int
+	playlists map[string][]byte	quality   int
 	startup   map[string]bool
 	sources   []nativeStartupPlaylist
 }
@@ -52,11 +51,11 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 	hls := media.Playlist != "" || len(media.HLSKey) > 0 || ctx.Value(nativeDownloadHLSKey{}) == true || strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
 	entry := nativeDownloadFileName(job.Drama, job.Index, ".mp4")
 	if hls {
-		bundle, err = manager.downloadBundle(ctx, media, job.Quality)
+		entry = nativeDownloadFileName(job.Drama, job.Index, ".m3u8")
+		bundle, err = manager.downloadBundle(ctx, media, job.Quality, entry)
 		if err != nil {
 			return nativeDownloadResult{}, err
 		}
-		entry = "index.m3u8"
 	} else {
 		bundle.assets = []nativeDownloadAsset{{address: media.URL, name: entry}}
 	}
@@ -72,18 +71,32 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 		encoded, _ := json.Marshal(bundle.playlists)
 		identity += "\x00" + string(encoded)
 	}
-	fingerprint := sha256.Sum256([]byte(identity))
-	marker := filepath.Join(directory, ".bundle")
-	previous, _ := os.ReadFile(marker)
-	if len(previous) > 0 && string(previous) != hex.EncodeToString(fingerprint[:]) {
-		if err := os.RemoveAll(directory); err != nil {
-			return nativeDownloadResult{}, errors.New("无法替换旧的下载文件")
-		}
-	}
+	sum := sha256.Sum256([]byte(identity))
+	fingerprint := hex.EncodeToString(sum[:])
+	marker := filepath.Join(directory, nativeDownloadMarkerName(job))
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nativeDownloadResult{}, errors.New("无法创建下载文件，请检查存储空间")
 	}
-	if err := nativeDownloadWrite(marker, []byte(hex.EncodeToString(fingerprint[:]))); err != nil {
+	names := []string{entry}
+	for _, asset := range bundle.assets {
+		names = append(names, asset.name)
+	}
+	for name := range bundle.playlists {
+		names = append(names, name)
+	}
+	if previous, readErr := os.ReadFile(marker); readErr == nil {
+		var saved nativeDownloadMarker
+		if json.Unmarshal(previous, &saved) == nil && saved.Fingerprint != fingerprint {
+			for _, name := range saved.Files {
+				discardDownloadMedia(directory, name)
+			}
+		}
+	}
+	encoded, encodeErr := json.Marshal(nativeDownloadMarker{Fingerprint: fingerprint, Files: names})
+	if encodeErr != nil {
+		return nativeDownloadResult{}, errors.New("无法记录下载计划")
+	}
+	if err := nativeDownloadWrite(marker, encoded); err != nil {
 		return nativeDownloadResult{}, err
 	}
 	var completedBytes int64

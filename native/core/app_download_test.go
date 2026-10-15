@@ -421,8 +421,9 @@ func TestNativeDownloadHLSBundleIncludesSelectedAudioKeysAndByteRanges(t *testin
 	manager := downloadTestManager(t)
 	job := downloadTestInput(1)
 	record := nativeDownloadJob{ID: nativeDownloadID(job.Drama.ID, 1), Drama: job.Drama, Index: 1, Quality: 720}
+	entry := nativeDownloadFileName(job.Drama, 1, ".m3u8")
 	result, err := manager.transferMedia(context.Background(), record, providerMedia{URL: upstream.URL + "/master.m3u8"})
-	if err != nil || result.file != "index.m3u8" || result.quality != 720 {
+	if err != nil || result.file != entry || result.quality != 720 {
 		t.Fatalf("bundle failed: %+v %v", result, err)
 	}
 	directory := filepath.Join(manager.root, record.ID)
@@ -473,7 +474,7 @@ func TestNativeDownloadHLSRejectsLiveAndUnsupportedEncryption(t *testing.T) {
 		"#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"key\"\n#EXTINF:2,\nseg.ts\n#EXT-X-ENDLIST\n",
 		"#EXTM3U\n#EXT-X-DEFINE:NAME=\"host\",VALUE=\"x\"\n#EXTINF:2,\nseg.ts\n#EXT-X-ENDLIST\n",
 	} {
-		_, err := manager.downloadBundle(context.Background(), providerMedia{URL: "https://synthetic.test/index.m3u8", Playlist: playlist}, 0)
+		_, err := manager.downloadBundle(context.Background(), providerMedia{URL: "https://synthetic.test/index.m3u8", Playlist: playlist}, 0, "index.m3u8")
 		if err == nil {
 			t.Fatalf("accepted unsupported playlist: %s", playlist)
 		}

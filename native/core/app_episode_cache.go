@@ -133,7 +133,7 @@ func (cache *nativeEpisodeCache) run(ctx context.Context, input nativeInput, med
 		if err == nil {
 			result, err = cache.manager.transferMedia(context.WithValue(work, nativeDownloadHLSKey{}, forceHLS), cache.job, media)
 		}
-		if err == nil && result.file != "index.m3u8" && len(media.CENCKey) == 0 {
+		if err == nil && !nativeDownloadPlaylistFile(result.file) && len(media.CENCKey) == 0 {
 			file, openErr := os.Open(filepath.Join(cache.directory, result.file))
 			if openErr != nil {
 				err = openErr

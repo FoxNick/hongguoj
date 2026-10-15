@@ -594,23 +594,27 @@ func (manager *nativeDownloads) promoteMedia(drama string, index int, name strin
 }
 
 func discardDownloadMedia(directory, name string) {
-	if name == "" || name == "media.mp4" || !nativeDownloadFileNameValid(name) {
+	discardDownloadMediaDepth(directory, name, 0)
+}
+
+func discardDownloadMediaDepth(directory, name string, depth int) {
+	if name == "" || depth > 4 || !nativeDownloadFileNameValid(name) {
 		return
 	}
-	if name == "index.m3u8" {
+	if strings.HasSuffix(strings.ToLower(name), ".m3u8") {
 		if data, err := os.ReadFile(filepath.Join(directory, name)); err == nil {
 			for _, line := range strings.Split(string(data), "\n") {
 				entry := strings.TrimSpace(line)
-				if entry == "" || strings.HasPrefix(entry, "#") || !nativeDownloadFileNameValid(entry) {
+				if entry == "" || strings.HasPrefix(entry, "#") {
 					continue
 				}
-				_ = os.Remove(filepath.Join(directory, entry))
-				_ = os.Remove(filepath.Join(directory, entry+".json"))
+				discardDownloadMediaDepth(directory, entry, depth+1)
 			}
 		}
 	}
-	_ = os.Remove(filepath.Join(directory, name))
-	_ = os.Remove(filepath.Join(directory, name+".json"))
+	for _, suffix := range []string{"", ".part", ".json"} {
+		_ = os.Remove(filepath.Join(directory, name+suffix))
+	}
 }
 
 func (manager *nativeDownloads) close() {

@@ -43,6 +43,19 @@ func nativeDownloadSanitize(value, fallback string) string {
 	return name
 }
 
+type nativeDownloadMarker struct {
+	Fingerprint string   `json:"fingerprint"`
+	Files       []string `json:"files"`
+}
+
+func nativeDownloadPlaylistFile(name string) bool {
+	return strings.HasSuffix(strings.ToLower(name), ".m3u8")
+}
+
+func nativeDownloadMarkerName(job nativeDownloadJob) string {
+	return ".bundle-" + nativeDownloadEpisodeLabel(job.Index)
+}
+
 func nativeDownloadFolder(drama nativeDrama) string {
 	return nativeDownloadSanitize(drama.Source, "其他") + "/" +
 		nativeDownloadSanitize(drama.Title, "未命名短剧")

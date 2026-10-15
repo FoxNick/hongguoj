@@ -94,12 +94,13 @@ func isHuangguoProviderSource(source string) bool {
 	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceSorani, sourceGuipian, sourceHanxiaoquan:
 		return true
 	default:
-		return false
+		return isDuanjuProviderSource(source)
 	}
 }
 
 func canonicalProviderSource(source string) string {
-	switch strings.ToLower(strings.TrimSpace(source)) {
+	key := strings.ToLower(strings.TrimSpace(source))
+	switch key {
 	case "huangguo", "huangguoai", "huangguoai.com":
 		return sourceHuangguoAI
 	case "huangguo-video", "huangguo.video":
@@ -122,9 +123,11 @@ func canonicalProviderSource(source string) string {
 		return sourceGuipian
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":
 		return sourceHanxiaoquan
-	default:
-		return strings.TrimSpace(source)
 	}
+	if canonical, found := duanjuSourceAliases[key]; found {
+		return canonical
+	}
+	return strings.TrimSpace(source)
 }
 
 func mergeDramaMetadata(base, extra Drama) Drama {
@@ -243,6 +246,10 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)
 	default:
+		if isDuanjuProviderSource(source) {
+			drama, chapters, err := d.fetchDuanjuDetail(ctx, source, sourceID)
+			return drama.DisplayTitle(), chapters, err
+		}
 		return "", nil, fmt.Errorf("unsupported provider source: %s", source)
 	}
 }

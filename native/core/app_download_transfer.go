@@ -27,7 +27,8 @@ type nativeDownloadAsset struct {
 
 type nativeDownloadBundle struct {
 	assets    []nativeDownloadAsset
-	playlists map[string][]byte	quality   int
+	playlists map[string][]byte
+	quality   int
 	startup   map[string]bool
 	sources   []nativeStartupPlaylist
 }

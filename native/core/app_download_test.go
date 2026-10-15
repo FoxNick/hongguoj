@@ -101,7 +101,8 @@ func TestNativeDownloadsOriginalBytesPersistenceAndLocalPriority(t *testing.T) {
 		}
 	}
 	id := nativeDownloadID(input.Drama.ID, 1)
-	if err := os.Remove(filepath.Join(reopened.root, id, "media.mp4")); err != nil {
+	record := reopened.jobs[id]
+	if err := os.Remove(filepath.Join(reopened.root, filepath.FromSlash(record.Folder), record.File)); err != nil {
 		t.Fatal(err)
 	}
 	for attempt := 0; attempt < 2; attempt++ {

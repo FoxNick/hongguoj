@@ -89,7 +89,10 @@ class DownloadTaskHandler extends TaskHandler {
     if (_polling) return;
     _polling = true;
     try {
-      if (library != null) unawaited(library!.maybeExport());
+      if (library != null) {
+        unawaited(library!.maybePromoteMedia());
+        unawaited(library!.maybeExport());
+      }
       final jobs = await repository.downloads();
       final active = jobs.where((job) => job.active).toList();
       final work = await repository.workLease('', '');

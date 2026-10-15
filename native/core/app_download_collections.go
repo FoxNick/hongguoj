@@ -35,7 +35,7 @@ func (manager *nativeDownloads) localFilesValid(record nativeDownloadRecord) boo
 		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
 			return false
 		}
-		if name == "media.mp4" && record.Bytes > 0 && info.Size() != record.Bytes {
+		if name == record.File && !strings.HasSuffix(name, ".m3u8") && record.Bytes > 0 && info.Size() != record.Bytes {
 			return false
 		}
 		if !strings.HasSuffix(name, ".m3u8") {

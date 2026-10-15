@@ -19,7 +19,6 @@ type nativeResourceSettings struct {
 	CatalogConcurrency  int    `json:"catalogConcurrency"`
 	CatalogIntervalMS   int    `json:"catalogIntervalMs"`
 	DownloadConcurrency int    `json:"downloadConcurrency"`
-	DownloadBySource    bool   `json:"downloadBySource"`
 	Warning             string `json:"warning,omitempty"`
 	SystemProxyStatus   string `json:"systemProxyStatus,omitempty"`
 }
@@ -136,7 +135,6 @@ func (engine *nativeEngine) applyResourceSettings(settings nativeResourceSetting
 	if engine.downloads != nil {
 		engine.downloads.mu.Lock()
 		engine.downloads.concurrency = settings.DownloadConcurrency
-		engine.downloads.bySource = settings.DownloadBySource
 		engine.downloads.scheduleLocked()
 		engine.downloads.mu.Unlock()
 	}

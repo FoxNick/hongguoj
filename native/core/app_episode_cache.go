@@ -133,7 +133,7 @@ func (cache *nativeEpisodeCache) run(ctx context.Context, input nativeInput, med
 		if err == nil {
 			result, err = cache.manager.transferMedia(context.WithValue(work, nativeDownloadHLSKey{}, forceHLS), cache.job, media)
 		}
-		if err == nil && result.file == "media.mp4" && len(media.CENCKey) == 0 {
+		if err == nil && result.file != "index.m3u8" && len(media.CENCKey) == 0 {
 			file, openErr := os.Open(filepath.Join(cache.directory, result.file))
 			if openErr != nil {
 				err = openErr
@@ -209,7 +209,7 @@ func (cache *nativeEpisodeCache) verify(ctx context.Context, result nativeDownlo
 				return errNativeLocalFile
 			}
 			resources[name] = state
-		} else if !os.IsNotExist(readErr) || name == "media.mp4" {
+		} else if !os.IsNotExist(readErr) || name == result.file {
 			return errNativeLocalFile
 		}
 		files[name] = info.Size()

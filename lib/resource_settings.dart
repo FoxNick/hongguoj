@@ -13,13 +13,11 @@ class ResourceSettings {
     this.catalogConcurrency = 3,
     this.catalogIntervalMs = 250,
     this.downloadConcurrency = 2,
-    this.downloadBySource = false,
     this.warning = '',
     this.systemProxyStatus = '',
   });
   final String proxyMode, proxyUrl, warning, systemProxyStatus;
   final int catalogConcurrency, catalogIntervalMs, downloadConcurrency;
-  final bool downloadBySource;
 
   factory ResourceSettings.fromJson(Map<String, dynamic> data) =>
       ResourceSettings(
@@ -28,7 +26,6 @@ class ResourceSettings {
         catalogConcurrency: intValue(data['catalogConcurrency']),
         catalogIntervalMs: intValue(data['catalogIntervalMs']),
         downloadConcurrency: intValue(data['downloadConcurrency']),
-        downloadBySource: data['downloadBySource'] == true,
         warning: data['warning'] as String? ?? '',
         systemProxyStatus: data['systemProxyStatus'] as String? ?? '',
       );
@@ -39,7 +36,6 @@ class ResourceSettings {
     'catalogConcurrency': catalogConcurrency,
     'catalogIntervalMs': catalogIntervalMs,
     'downloadConcurrency': downloadConcurrency,
-    'downloadBySource': downloadBySource,
   };
 }
 

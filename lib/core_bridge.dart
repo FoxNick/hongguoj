@@ -141,6 +141,11 @@ abstract class AppRepository {
     int quality = 0,
   }) async => throw AppFailure('当前环境不支持下载');
   Future<void> controlDownloads(String command, {String id = ''}) async {}
+  Future<bool> promoteDownloadMedia(
+    Drama drama,
+    int index,
+    String file,
+  ) async => false;
   Future<DownloadBatchResult> controlDownloadBatch(
     String command,
     List<String> ids, {
@@ -871,6 +876,22 @@ class NativeRepository extends AppRepository {
       'command': command,
       'jobId': id,
     });
+  }
+
+  @override
+  Future<bool> promoteDownloadMedia(
+    Drama drama,
+    int index,
+    String file,
+  ) async {
+    _downloadPermission();
+    final result = await _call({
+      'action': 'promoteDownloadMedia',
+      'drama': drama.toJson(),
+      'index': index,
+      'command': file,
+    });
+    return result['ok'] == true;
   }
 
   @override

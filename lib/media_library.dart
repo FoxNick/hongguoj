@@ -164,6 +164,7 @@ class MediaLibrary extends ChangeNotifier {
   List<LocalMediaItem> _items = [];
   final _skipped = <String>{};
   bool busy = false, _checking = false, _cancelled = false, _suspended = false;
+  bool _promoting = false;
   bool get suspended => _suspended;
   set suspended(bool value) {
     _suspended = value;
@@ -562,6 +563,80 @@ class MediaLibrary extends ChangeNotifier {
     } finally {
       _checking = false;
     }
+  }
+
+  Future<void> maybePromoteMedia() async {
+    if (_promoting ||
+        busy ||
+        suspended ||
+        DateTime.now().isBefore(_retryAfter)) {
+      return;
+    }
+    _promoting = true;
+    try {
+      final jobs = await repository.downloads();
+      for (final job in jobs.where((item) => item.completed)) {
+        try {
+          await _promoteMedia(job);
+        } catch (_) {}
+      }
+    } finally {
+      _promoting = false;
+    }
+  }
+
+  Future<void> _promoteMedia(DownloadJob job) async {
+    final plan = await repository.localPlayback(job.drama, job.episode);
+    if (plan == null || !plan.local) return;
+    if (!plan.url.toLowerCase().endsWith('.m3u8')) return;
+    final directory = path.dirname(plan.url);
+    if (!await Directory(directory).exists()) return;
+    final name = _promotedMediaName(job.drama, job.episode.number);
+    final target = path.join(directory, name);
+    final staged = '$target.part';
+    if (!await File(target).exists()) {
+      if (await File(staged).exists()) await File(staged).delete();
+      await executor.run([
+        '-y',
+        '-allowed_extensions',
+        'ALL',
+        '-protocol_whitelist',
+        'file,crypto,data',
+        '-i',
+        plan.url,
+        '-c',
+        'copy',
+        '-movflags',
+        '+faststart',
+        staged,
+      ]);
+      final produced = await File(staged).exists()
+          ? await File(staged).length()
+          : 0;
+      if (produced <= 0) {
+        if (await File(staged).exists()) await File(staged).delete();
+        throw AppFailure('播放列表转换未产生有效文件，已保留原分片');
+      }
+      await File(staged).rename(target);
+    }
+    await repository.promoteDownloadMedia(
+      job.drama,
+      job.episode.number,
+      name,
+    );
+  }
+
+  String _promotedMediaName(Drama drama, int index) =>
+      '${_mediaNamePart(drama.title)} ${index.toString().padLeft(3, '0')}.mp4';
+
+  String _mediaNamePart(String value) {
+    final cleaned = value
+        .replaceAll(RegExp(r'[/\\:*?"<>|\x00-\x1f\x7f]'), '_')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final trimmed = cleaned.replaceAll(RegExp(r'^[.\s]+|[.\s]+$'), '');
+    if (trimmed.isEmpty) return '未命名短剧';
+    return trimmed.length > 60 ? trimmed.substring(0, 60).trim() : trimmed;
   }
 
   Future<void> remove(LocalMediaItem selected) async {

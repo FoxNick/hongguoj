@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -65,7 +66,6 @@ type nativeDownloads struct {
 	workers     sync.WaitGroup
 	lastSaved   time.Time
 	concurrency int
-	bySource    bool
 	resolve     func(context.Context, nativeDownloadJob) (providerMedia, error)
 }
 
@@ -96,7 +96,7 @@ func newNativeDownloads(engine *nativeEngine) *nativeDownloads {
 	manager := &nativeDownloads{root: nativeDownloadLocation(engine.directory), engine: engine,
 		jobs: map[string]*nativeDownloadRecord{}, active: map[string]context.CancelFunc{}}
 	settings := engine.resourceSettings()
-	manager.concurrency, manager.bySource = settings.DownloadConcurrency, settings.DownloadBySource
+	manager.concurrency = settings.DownloadConcurrency
 	manager.resolve = func(ctx context.Context, job nativeDownloadJob) (providerMedia, error) {
 		return engine.downloader.resolveProviderMedia(ctx, Task{
 			DramaID: job.Drama.ID, DramaTitle: job.Drama.Title, Chapter: job.Chapter, Index: job.Index})
@@ -128,10 +128,10 @@ func (manager *nativeDownloads) load() error {
 			return errors.New("下载记录条目无效，原索引和文件已保留")
 		}
 		seen[record.ID] = true
-		if record.Folder != "" && record.Folder != record.Drama.Source+"/"+record.ID {
+		if !nativeDownloadFolderValid(record.Folder) {
 			return errors.New("下载目录记录无效，原文件已保留")
 		}
-		if record.File != "" && record.File != "media.mp4" && record.File != "index.m3u8" {
+		if record.File != "" && !nativeDownloadFileNameValid(record.File) {
 			return errors.New("下载记录文件信息无效，原索引和文件已保留")
 		}
 		switch record.State {
@@ -307,9 +307,7 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 		manager.jobs[id] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID: id, Drama: input.Drama, Chapter: entry.Chapter, Index: entry.Index,
 			Quality: input.Quality, State: "queued", Created: time.Now().UnixMilli()}}
-		if manager.bySource {
-			manager.jobs[id].Folder = input.Drama.Source + "/" + id
-		}
+		manager.jobs[id].Folder = nativeDownloadFolder(input.Drama)
 		added = append(added, id)
 		tasks++
 	}
@@ -564,6 +562,55 @@ func (manager *nativeDownloads) localPlan(drama string, index int) (nativePlan, 
 	}
 	return nativePlan{URL: path, Key: record.Key, Local: true, Quality: record.ActualQuality,
 		Qualities: []int{}, Headers: map[string]string{}, RouteCount: 1}, true, nil
+}
+
+func (manager *nativeDownloads) promoteMedia(drama string, index int, name string) (bool, error) {
+	if !nativeDownloadFileNameValid(name) || !strings.HasSuffix(strings.ToLower(name), ".mp4") {
+		return false, errors.New("替换后的媒体文件名无效")
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	record := manager.jobs[nativeDownloadID(drama, index)]
+	if record == nil || record.State != "completed" || record.File == "" {
+		return false, errors.New("没有可替换的已完成下载")
+	}
+	if record.File == name {
+		return true, nil
+	}
+	directory := manager.jobDirectory(record.nativeDownloadJob)
+	info, statErr := os.Stat(filepath.Join(directory, name))
+	if statErr != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
+		return false, errors.New("替换后的媒体文件不存在或不完整")
+	}
+	previous, previousBytes := record.File, record.Bytes
+	record.File, record.Bytes = name, info.Size()
+	record.Archived = false
+	if err := manager.saveLocked(); err != nil {
+		record.File, record.Bytes = previous, previousBytes
+		return false, err
+	}
+	discardDownloadMedia(directory, previous)
+	return true, nil
+}
+
+func discardDownloadMedia(directory, name string) {
+	if name == "" || name == "media.mp4" || !nativeDownloadFileNameValid(name) {
+		return
+	}
+	if name == "index.m3u8" {
+		if data, err := os.ReadFile(filepath.Join(directory, name)); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				entry := strings.TrimSpace(line)
+				if entry == "" || strings.HasPrefix(entry, "#") || !nativeDownloadFileNameValid(entry) {
+					continue
+				}
+				_ = os.Remove(filepath.Join(directory, entry))
+				_ = os.Remove(filepath.Join(directory, entry+".json"))
+			}
+		}
+	}
+	_ = os.Remove(filepath.Join(directory, name))
+	_ = os.Remove(filepath.Join(directory, name+".json"))
 }
 
 func (manager *nativeDownloads) close() {

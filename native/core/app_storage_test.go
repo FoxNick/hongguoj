@@ -14,17 +14,20 @@ func storageFixture(t *testing.T) (*nativeEngine, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(engine.downloads.close)
-	id := nativeDownloadID("hongguo:70001", 1)
+	drama := nativeDrama{ID: "hongguo:70001", Source: "hongguo", Title: "合成短剧"}
+	id := nativeDownloadID(drama.ID, 1)
 	manager := engine.downloads
-	if err := os.MkdirAll(filepath.Join(manager.root, id), 0700); err != nil {
+	folder := nativeDownloadFolder(drama)
+	name := nativeDownloadFileName(drama, 1, ".mp4")
+	if err := os.MkdirAll(filepath.Join(manager.root, filepath.FromSlash(folder)), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(manager.root, id, "media.mp4"), []byte("synthetic-video"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(manager.root, filepath.FromSlash(folder), name), []byte("synthetic-video"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	manager.jobs[id] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
-		ID: id, Index: 1, Drama: nativeDrama{ID: "hongguo:70001", Source: "hongguo"},
-		State: "completed", Bytes: 15}, File: "media.mp4"}
+		ID: id, Index: 1, Drama: drama, Folder: folder,
+		State: "completed", Bytes: 15}, File: name}
 	if err := manager.saveLocked(); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +48,8 @@ func TestDownloadMigrationPreservesMediaAndRestartLocation(t *testing.T) {
 	if _, err := os.Stat(old); !os.IsNotExist(err) {
 		t.Fatal("old media not cleaned after successful migration")
 	}
-	if body, err := os.ReadFile(filepath.Join(location, id, "media.mp4")); err != nil || string(body) != "synthetic-video" {
+	record := engine.downloads.jobs[id]
+	if body, err := os.ReadFile(filepath.Join(location, filepath.FromSlash(record.Folder), record.File)); err != nil || string(body) != "synthetic-video" {
 		t.Fatalf("media not copied: %v", err)
 	}
 	info, err := engine.storage()

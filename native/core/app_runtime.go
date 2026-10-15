@@ -448,6 +448,9 @@ func nativeDispatch(input nativeInput) (any, error) {
 		return map[string]int{"added": added}, err
 	case "controlDownloads":
 		return true, engine.downloads.control(input.JobID, input.Command)
+	case "promoteDownloadMedia":
+		promoted, err := engine.downloads.promoteMedia(input.Drama.ID, input.Index, input.Command)
+		return map[string]bool{"ok": promoted}, err
 	case "localPlayback":
 		plan, _, err := engine.downloads.localPlan(input.Drama.ID, input.Index)
 		if err == nil && input.Command == "play" {

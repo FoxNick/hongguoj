@@ -2,7 +2,7 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 使用同一 Android 应用，保留原项目站源、播放和下载功能；“无广爽看”是此项目的使用体验定位，具体片源和广告情况取决于内容来源，不保证所有资源无广告。
 
-当前源码版本为 **0.2.4+36**（下载按剧名组织、HLS 转 MP4），前一版本为 **0.2.3+35**（红果取流编码优先、版本号偏移修复），再前一版本为 **0.2.2+34**（下载解密、合并导出 MP4），再前 **0.2.1+33**（更名短句汇、换品牌图、详情页预取提速），再前 **0.2.0+32**（更新频道切换与联系方式），其后为 **0.1.9+31**（红果取流签名补全，用户已确认真机可播），再后 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线 **0.1.7+29**（手机顶部弹幕更新），正式基线 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+当前源码版本为 **0.2.4+36**（下载按剧名组织、HLS 转 MP4），前一版本为 **0.2.3+35**（红果取流编码优先、版本号偏移修复），再前一版本为 **0.2.2+34**（下载解密、合并导出 MP4），再前 **0.2.1+33**（更名短句汇、换品牌图、详情页预取提速），再前 **0.2.0+32**（更新频道切换与联系方式），其后为 **0.1.9+31**（红果取流签名补全，用户已确认真机可播），再后 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线 **0.1.7+29**（手机顶部弹幕更新），正式基线 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。推送提交会自动编译与静态检查，打 `app-v*` 标签或手动触发才会构建 APK 并发布。原项目说明、历史改动和依赖许可见下文及各依赖目录。
 
 ## 0.2.4 下载按剧名组织与 HLS 转 MP4（开发快照，待验证）
 
@@ -709,15 +709,21 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 
 ### GitHub Actions
 
-本仓库仅在手动运行 **Build app packages** 时检查并构建两版（默认与 `--all-sources`）；推送分支、标签或提交 PR 不会自动构建：
+工作流 **Build app packages** 按触发方式分两条路径：
+
+| 触发 | 行为 |
+| --- | --- |
+| 推送到 `main`（或提交 PR 改动源码） | 只跑 `verify`：编译原生核心（`go build ./...`）、`go vet`、`flutter analyze`，以及仅报告不阻断的 `go test`。约 2–4 分钟，**不构建 APK、不发布** |
+| 推送 `app-v*` 标签 | `verify` 通过后构建 Android APK 并创建 GitHub Release |
+| 手动 `workflow_dispatch` | 同上（未指定标签时按 `pubspec.yaml` 版本派生标签） |
+
+推送标签前需先在 `pubspec.yaml` 提升 `version`；`verify` 会校验标签版本与 `pubspec.yaml` 一致（标签 `app-v0.2.4-36` 对应 `version: 0.2.4+36`），不一致直接失败。
 
 | 产物 | 内容 |
 | --- | --- |
-| `*-android` | 三种架构 APK 和 SHA256 |
-| `*-windows` | 完整 ZIP 和 SHA256 |
-| `*-ios-unsigned` | 未签名 `.app` ZIP 和 SHA256，不能直接当已签名 IPA 安装 |
+| `zhenguojian-android` | 三种架构 APK 和 SHA256 |
 
-手动运行工作流且 android / ios / windows 全部构建成功时，会创建 / 更新 GitHub Release（tag `app-v{version}`）。发布新版本前需先在 `pubspec.yaml` 提升 `version`，否则会覆盖同名 tag 的 Release。
+仅在标签或手动触发时创建 GitHub Release（tag `app-v{version}`）。同名 Release 已存在则会失败并提示递增版本，不会覆盖既有发布文件。
 
 Android 正式发布使用同一签名并递增构建号，在仓库 Secrets 配置：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。未配置时生成 debug 签名预览包。
 

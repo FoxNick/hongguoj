@@ -1,10 +1,16 @@
 name: Build app packages
 
 on:
+  push:
+    branches: [main]
+    tags: ['app-v*']
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: app-build-${{ github.workflow }}-${{ github.ref }}
@@ -15,7 +21,50 @@ env:
   GOSUMDB: sum.golang.org
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.4'
+          channel: stable
+          cache: true
+      - name: 校验 tag 与 pubspec 版本一致
+        if: startsWith(github.ref, 'refs/tags/app-v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#app-v}"
+          tag_version="${tag_version//-/+}"
+          pub_version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
+          if [ "$tag_version" != "$pub_version" ]; then
+            echo "标签版本 ${tag_version} 与 pubspec ${pub_version} 不一致。" >&2
+            exit 1
+          fi
+      - name: 编译原生核心
+        working-directory: native
+        run: go build ./...
+      - name: 静态检查原生核心
+        working-directory: native
+        run: go vet ./...
+      - name: 原生核心单元测试
+        working-directory: native
+        continue-on-error: true
+        run: go test ./...
+      - name: 获取 Dart 依赖
+        run: flutter pub get
+      - name: 分析 Dart 与测试
+        run: flutter analyze lib test
+
   android:
+    needs: [verify]
+    if: startsWith(github.ref, 'refs/tags/app-v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -76,8 +125,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   release:
-    needs: android
-    if: success()
+    needs: [android]
+    if: success() && (startsWith(github.ref, 'refs/tags/app-v') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -112,7 +161,11 @@ jobs:
         run: |
           set -euo pipefail
           version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
-          tag="app-v${version//+/-}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="app-v${version//+/-}"
+          fi
           {
             printf '%s\n\n' "版本 ${version}。本版为真果鉴全站源 Android APK。"
             printf '%s\n' "- 全站源：包含全部已接入站源"

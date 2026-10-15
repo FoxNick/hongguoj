@@ -1057,6 +1057,26 @@ class _HomeScreenState extends State<HomeScreen> {
                             icon: const Icon(Icons.system_update),
                             label: const Text('检查软件更新'),
                           ),
+                          TextButton(
+                            onPressed: () {
+                              unawaited(
+                                Clipboard.setData(
+                                  const ClipboardData(text: 'abai531'),
+                                ),
+                              );
+                              final messenger = ScaffoldMessenger.of(context);
+                              Navigator.of(context, rootNavigator: true).pop();
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('微信号 abai531 已复制，可在微信中搜索添加'),
+                                ),
+                              );
+                            },
+                            child: const Text(
+                              'BUG 反馈 / 定制软件请联系微信：abai531',
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                         ],
                       );
                     }

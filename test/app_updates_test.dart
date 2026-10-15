@@ -5,7 +5,7 @@ import 'package:duanju_app/app_updates.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const installed = InstalledApp(version: '0.1.5', code: 2027, abi: 'arm64-v8a');
+const installed = InstalledApp(version: '0.1.5', code: 27, abi: 'arm64-v8a');
 Map<String, dynamic> releaseJson({
   String abi = 'arm64-v8a',
   int build = 28,
@@ -72,7 +72,7 @@ class FakeUpdatePlatform implements UpdatePlatform {
   String installResult = 'cancelled';
   InstalledApp app = const InstalledApp(
     version: '0.1.5',
-    code: 2027,
+    code: 27,
     abi: 'arm64-v8a',
   );
   Completer<InstalledApp>? installedGate;
@@ -108,10 +108,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   group('release policy', () {
     test('selects exact installed ABI and increments actual code', () {
-      for (final abi in updateAbiOffsets.keys) {
+      for (final abi in updateSupportedAbis) {
         final app = InstalledApp(
           version: '0.1.2-dev.1',
-          code: updateAbiOffsets[abi]! + 27,
+          code: 27,
           abi: abi,
         );
         final candidate = AppRelease.parse(releaseJson(abi: abi), app)!;
@@ -179,6 +179,29 @@ void main() {
         expect(() => AppRelease.parse(json, installed), throwsFormatException);
       },
     );
+    test('tries direct API first and mirrors first for downloads', () {
+      final api = updateApiCandidates();
+      expect(api.first.toString(), updateApi);
+      expect(api.length, 1 + updateMirrors.where((m) => m.api).length);
+      for (final uri in api.skip(1)) {
+        expect(
+          updateMirrors.any((m) => m.api && uri.toString().startsWith(m.prefix)),
+          isTrue,
+        );
+      }
+      final target = Uri.parse(
+        'https://github.com/$updateRepository/releases/download/app-v0.1.6-28/HongguoTV-0.1.6-arm64-v8a.apk',
+      );
+      final downloads = updateDownloadCandidates(target);
+      expect(downloads.length, updateMirrors.length + 1);
+      expect(downloads.last, target);
+      for (final mirror in updateMirrors) {
+        expect(
+          downloads.any((u) => u.toString() == '${mirror.prefix}$target'),
+          isTrue,
+        );
+      }
+    });
     test(
       'TLS and redirect allowlist reject credentials, ports, local/private and foreign origins',
       () {
@@ -187,6 +210,50 @@ void main() {
         expect(
           trustedUpdateUrl(Uri.parse(updateApi), metadata: true, initial: true),
           isTrue,
+        );
+        expect(
+          trustedUpdateUrl(
+            Uri.parse('https://gh-proxy.com/$updateApi'),
+            metadata: true,
+            initial: true,
+          ),
+          isTrue,
+        );
+        expect(
+          trustedUpdateUrl(
+            Uri.parse('${updateMirrors.first.prefix}$valid'),
+            metadata: false,
+            initial: true,
+          ),
+          isTrue,
+        );
+        expect(
+          trustedUpdateUrl(
+            Uri.parse(
+              'https://evil.test/https://github.com/$updateRepository/releases/download/a/b',
+            ),
+            metadata: false,
+            initial: true,
+          ),
+          isFalse,
+        );
+        expect(
+          trustedUpdateUrl(
+            Uri.parse('https://gh-proxy.com/https://api.github.com/other'),
+            metadata: true,
+            initial: true,
+          ),
+          isFalse,
+        );
+        expect(
+          trustedUpdateUrl(
+            Uri.parse(
+              'https://gh-proxy.com/https://github.com/other/repo/releases/download/a/b',
+            ),
+            metadata: false,
+            initial: true,
+          ),
+          isFalse,
         );
         for (final url in [
           'http://release-assets.githubusercontent.com/a',

@@ -200,7 +200,7 @@ class AppUpdateScreen extends StatelessWidget {
                         : null,
                   ),
                   const Text(
-                    '下载来自本项目的 GitHub Release。验证完成后，需要你确认安装；安装时请先保存或结束当前播放。返回此页可重试，观看记录不会因取消而删除。',
+                    '下载来自本项目的 GitHub Release，检查与下载会依次尝试加速镜像。验证完成后，需要你确认安装；安装时请先保存或结束当前播放。返回此页可重试，观看记录不会因取消而删除。',
                   ),
                   const SizedBox(height: 8),
                   const SelectableText(updatePage),

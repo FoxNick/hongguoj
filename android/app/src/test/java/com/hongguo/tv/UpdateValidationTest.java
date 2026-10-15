@@ -26,30 +26,31 @@ public final class UpdateValidationTest {
         reject(() -> UpdateValidation.verifyBytes(4, 4, hash, "b".repeat(64)));
         reject(() -> UpdateValidation.verifyBytes(4, 4, "bad", "bad"));
         for (String abi : new String[]{"armeabi-v7a", "arm64-v8a", "x86_64"}) {
-            long base = UpdateValidation.offset(abi);
             UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, SIGNER,
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), abi);
+                    31, 32, 32, abi, Set.of(abi), abi);
             reject(() -> UpdateValidation.verifyIdentity("com.hongguo.tv.debug", UpdateValidation.PACKAGE, SIGNER, SIGNER,
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), abi));
+                    31, 32, 32, abi, Set.of(abi), abi));
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, "other.package", SIGNER, SIGNER,
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), abi));
+                    31, 32, 32, abi, Set.of(abi), abi));
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, Set.of("fake"), Set.of("fake"),
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), abi));
+                    31, 32, 32, abi, Set.of(abi), abi));
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, Set.of("fake"),
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), abi));
+                    31, 32, 32, abi, Set.of(abi), abi));
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, Set.of(UpdateValidation.CERTIFICATE, "extra"),
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), abi));
-            for (long code : new long[]{base + 26, base + 27, base + 29, base + 1000}) {
+                    31, 32, 32, abi, Set.of(abi), abi));
+            for (long code : new long[]{30, 31, 33, 1000}) {
                 reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, SIGNER,
-                        base + 27, code, base + 28, abi, Set.of(abi), abi));
+                        31, code, 32, abi, Set.of(abi), abi));
             }
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, SIGNER,
-                    base + 27, base + 28, base + 28, abi, Set.of("wrong"), abi));
+                    31, 32, 32, abi, Set.of("wrong"), abi));
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, SIGNER,
-                    base + 27, base + 28, base + 28, abi, Set.of(abi, "wrong"), abi));
+                    31, 32, 32, abi, Set.of(abi, "wrong"), abi));
             reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, SIGNER,
-                    base + 27, base + 28, base + 28, abi, Set.of(abi), "wrong"));
+                    31, 32, 32, abi, Set.of(abi), "wrong"));
         }
+        reject(() -> UpdateValidation.verifyIdentity(UpdateValidation.PACKAGE, UpdateValidation.PACKAGE, SIGNER, SIGNER,
+                31, 32, 32, "mips", Set.of("mips"), "mips"));
         UpdateInstallSession session = new UpdateInstallSession();
         session.begin(4821);
         session.pause();

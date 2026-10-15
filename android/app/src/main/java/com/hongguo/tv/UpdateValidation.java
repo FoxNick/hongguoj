@@ -4,7 +4,7 @@ import java.util.Set;
 
 public final class UpdateValidation {
     public static final String PACKAGE = "com.hongguo.tv";
-    public static final String CERTIFICATE = "55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9";
+    public static final String CERTIFICATE = "d04a0d1a33a8454a2dae629c4703aa46f42034f25352d350d08ffb5df9f6e2c2";
     public static final long MAXIMUM_BYTES = 256L * 1024 * 1024;
 
     public static void verifyBytes(long expected, long actual, String expectedHash, String actualHash) {
@@ -20,9 +20,7 @@ public final class UpdateValidation {
         require(installedSigners.size() == 1 && installedSigners.contains(CERTIFICATE)
                 && installedSigners.equals(archiveSigners), "安装包签名与当前正式版不匹配");
         require(archiveCode > installedCode && archiveCode == expectedCode, "安装包版本不是预期的新版本");
-        int offset = offset(installedAbi);
-        require(offset > 0 && installedCode > offset && installedCode < offset + 1000
-                && archiveCode > offset && archiveCode < offset + 1000, "安装包版本编号与架构不匹配");
+        require(offset(installedAbi) > 0, "安装包版本编号与架构不匹配");
         require(installedAbi.equals(requestedAbi) && archiveAbis.size() == 1 && archiveAbis.contains(installedAbi), "安装包架构与已安装应用不匹配");
     }
 

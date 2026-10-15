@@ -8,16 +8,49 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_build.dart';
 
-const updateRepository = 'qq294716498/HongguoTV-Phone-TV-NoAds';
+const updateRepository = 'abai569/hongguoj';
 const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const updateMaximumBytes = 256 * 1024 * 1024;
-const updateAbiOffsets = {
-  'armeabi-v7a': 1000,
-  'arm64-v8a': 2000,
-  'x86_64': 4000,
-};
+const updateSupportedAbis = {'armeabi-v7a', 'arm64-v8a', 'x86_64'};
+
+/// GitHub 加速镜像：地址按「镜像前缀 + 原始 GitHub 地址」拼接。
+///
+/// [api] 标记该镜像是否代理 API 请求。镜像出口 IP 由所有使用者共享，
+/// GitHub 对未认证请求按 IP 限流（每小时 60 次），因此检查更新优先直连，
+/// 只有直连失败才退回支持 API 的镜像；下载则相反，镜像优先、直连兜底。
+class UpdateMirror {
+  const UpdateMirror(this.prefix, {this.api = false});
+  final String prefix;
+  final bool api;
+}
+
+const updateMirrors = <UpdateMirror>[
+  UpdateMirror('https://gh-proxy.com/', api: true),
+  UpdateMirror('https://ghfast.top/'),
+  UpdateMirror('https://git-proxy.abai.eu.org/', api: true),
+];
+
+List<Uri> updateApiCandidates() => [
+  Uri.parse(updateApi),
+  for (final mirror in updateMirrors)
+    if (mirror.api) Uri.parse('${mirror.prefix}$updateApi'),
+];
+
+List<Uri> updateDownloadCandidates(Uri url) => [
+  for (final mirror in updateMirrors) Uri.parse('${mirror.prefix}$url'),
+  url,
+];
+
+String? unwrapUpdateMirror(String value) {
+  for (final mirror in updateMirrors) {
+    if (value.startsWith(mirror.prefix)) {
+      return value.substring(mirror.prefix.length);
+    }
+  }
+  return null;
+}
 
 class InstalledApp {
   const InstalledApp({
@@ -37,7 +70,7 @@ class InstalledApp {
         code is! int ||
         code <= 0 ||
         abi is! String ||
-        !updateAbiOffsets.containsKey(abi)) {
+        !updateSupportedAbis.contains(abi)) {
       throw const FormatException('无法确认已安装版本与架构');
     }
     return InstalledApp(version: version, code: code, abi: abi);
@@ -71,11 +104,12 @@ class AppRelease {
     final match = RegExp(r'^app-v(\d+\.\d+\.\d+)-(\d+)$').firstMatch(tag);
     if (match == null) throw const FormatException('版本标签无法识别');
     final build = int.parse(match[2]!);
-    final offset = updateAbiOffsets[installed.abi];
-    if (offset == null || build < 1 || build >= 1000) {
+    if (!updateSupportedAbis.contains(installed.abi) ||
+        build < 1 ||
+        build >= 1000) {
       throw const FormatException('版本编号或设备架构不受支持');
     }
-    final code = offset + build;
+    final code = build;
     if (code <= installed.code) return null;
     final version = match[1]!;
     final name = 'HongguoTV-$version-${installed.abi}.apk';
@@ -136,16 +170,25 @@ bool trustedUpdateUrl(
       uri.fragment.isNotEmpty) {
     return false;
   }
-  if (metadata) return uri.toString() == updateApi;
-  if (uri.host == 'github.com') {
-    return uri.query.isEmpty &&
-        uri.path.startsWith('/$updateRepository/releases/download/') &&
-        uri.pathSegments.length == 6 &&
-        !uri.pathSegments.any((s) => s == '..' || s == '.');
+  final unwrapped = unwrapUpdateMirror(uri.toString());
+  final target = Uri.tryParse(unwrapped ?? uri.toString());
+  if (target == null ||
+      target.scheme != 'https' ||
+      target.userInfo.isNotEmpty ||
+      target.port != 443 ||
+      target.fragment.isNotEmpty) {
+    return false;
+  }
+  if (metadata) return target.toString() == updateApi;
+  if (target.host == 'github.com') {
+    return target.query.isEmpty &&
+        target.path.startsWith('/$updateRepository/releases/download/') &&
+        target.pathSegments.length == 6 &&
+        !target.pathSegments.any((s) => s == '..' || s == '.');
   }
   return !initial &&
-      (uri.host == 'release-assets.githubusercontent.com' ||
-          uri.host == 'objects.githubusercontent.com');
+      (target.host == 'release-assets.githubusercontent.com' ||
+          target.host == 'objects.githubusercontent.com');
 }
 
 abstract class UpdateTransport {
@@ -227,31 +270,37 @@ class GithubUpdateTransport implements UpdateTransport {
 
   @override
   Future<Map<String, dynamic>> latest() async {
-    final client = _begin();
-    try {
-      return await (() async {
-        final response = await _open(
-          client,
-          Uri.parse(updateApi),
-          metadata: true,
-        );
-        final bytes = <int>[];
-        await for (final chunk in response.timeout(
-          const Duration(seconds: 15),
-        )) {
-          bytes.addAll(chunk);
-          if (bytes.length > 1024 * 1024) throw const FormatException('更新信息过大');
-        }
-        final data = jsonDecode(utf8.decode(bytes));
-        if (data is! Map<String, dynamic>) {
-          throw const FormatException('更新信息格式错误');
-        }
-        return data;
-      })().timeout(const Duration(seconds: 45));
-    } finally {
-      client.close(force: true);
-      if (identical(_active, client)) _active = null;
+    Object? lastError;
+    for (final uri in updateApiCandidates()) {
+      final client = _begin();
+      try {
+        return await (() async {
+          final response = await _open(client, uri, metadata: true);
+          final bytes = <int>[];
+          await for (final chunk in response.timeout(
+            const Duration(seconds: 15),
+          )) {
+            bytes.addAll(chunk);
+            if (bytes.length > 1024 * 1024) {
+              throw const FormatException('更新信息过大');
+            }
+          }
+          final data = jsonDecode(utf8.decode(bytes));
+          if (data is! Map<String, dynamic>) {
+            throw const FormatException('更新信息格式错误');
+          }
+          return data;
+        })().timeout(const Duration(seconds: 45));
+      } on UpdateCancelled {
+        rethrow;
+      } catch (error) {
+        lastError = error;
+      } finally {
+        client.close(force: true);
+        if (identical(_active, client)) _active = null;
+      }
     }
+    throw lastError ?? const FormatException('更新地址不可用');
   }
 
   @override
@@ -260,41 +309,53 @@ class GithubUpdateTransport implements UpdateTransport {
     File output,
     void Function(int) progress,
   ) async {
-    final client = _begin();
-    IOSink? sink;
-    try {
-      await (() async {
-        final response = await _open(client, release.url, metadata: false);
-        if (response.contentLength != -1 &&
-            response.contentLength != release.bytes) {
-          throw const FormatException('下载大小与发布信息不一致');
-        }
-        sink = output.openWrite();
-        var received = 0;
-        await for (final chunk in response.timeout(
-          const Duration(seconds: 30),
-        )) {
+    Object? lastError;
+    for (final uri in updateDownloadCandidates(release.url)) {
+      final client = _begin();
+      IOSink? sink;
+      try {
+        await (() async {
+          final response = await _open(client, uri, metadata: false);
+          if (response.contentLength != -1 &&
+              response.contentLength != release.bytes) {
+            throw const FormatException('下载大小与发布信息不一致');
+          }
+          sink = output.openWrite();
+          var received = 0;
+          await for (final chunk in response.timeout(
+            const Duration(seconds: 30),
+          )) {
+            if (_cancelled || !identical(_active, client)) {
+              throw const UpdateCancelled();
+            }
+            received += chunk.length;
+            if (received > release.bytes) {
+              throw const FormatException('安装包超出预期大小');
+            }
+            sink!.add(chunk);
+            await sink!.flush();
+            progress(received);
+          }
           if (_cancelled || !identical(_active, client)) {
             throw const UpdateCancelled();
           }
-          received += chunk.length;
-          if (received > release.bytes) {
-            throw const FormatException('安装包超出预期大小');
+          if (received != release.bytes) {
+            throw const FormatException('下载不完整，请重试');
           }
-          sink!.add(chunk);
-          await sink!.flush();
-          progress(received);
-        }
-        if (_cancelled || !identical(_active, client)) {
-          throw const UpdateCancelled();
-        }
-        if (received != release.bytes) throw const FormatException('下载不完整，请重试');
-      })().timeout(const Duration(minutes: 30));
-    } finally {
-      client.close(force: true);
-      await sink?.close();
-      if (identical(_active, client)) _active = null;
+        })().timeout(const Duration(minutes: 30));
+        return;
+      } on UpdateCancelled {
+        rethrow;
+      } catch (error) {
+        lastError = error;
+        progress(0);
+      } finally {
+        client.close(force: true);
+        await sink?.close();
+        if (identical(_active, client)) _active = null;
+      }
     }
+    throw lastError ?? const FormatException('下载地址不可用');
   }
 
   @override

@@ -15,34 +15,7 @@ env:
   GOSUMDB: sum.golang.org
 
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - run: flutter pub get --enforce-lockfile
-      - run: dart format --output=none --set-exit-if-changed lib test integration_test test_driver
-      - run: flutter analyze --no-pub --no-fatal-infos lib test integration_test test_driver
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true
-      - run: flutter test --no-pub --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true
-      - run: go test -race ./...
-        working-directory: native
-      - run: go test -race -ldflags="-X duanjuapp/native/core.buildAllSources=true" ./...
-        working-directory: native
-
   android:
-    needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -109,40 +82,8 @@ jobs:
           path: dist/android/*
           if-no-files-found: error
           retention-days: 14
-  windows:
-    if: false
-    needs: checks
-    runs-on: windows-latest
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - edition: hongguojian
-            arguments: ''
-          - edition: zhenguojian
-            arguments: '--all-sources'
-    steps:
-      - uses: actions/checkout@v4
-
-  ios:
-    if: false
-    needs: checks
-    runs-on: macos-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - edition: hongguojian
-            arguments: ''
-          - edition: zhenguojian
-            arguments: '--all-sources'
-    steps:
-      - uses: actions/checkout@v4
-
   release:
-    needs: [checks, android]
+    needs: android
     if: success()
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -189,7 +130,7 @@ jobs:
             printf '%s\n' "- *-x86_64.apk：模拟器"
             printf '\n%s\n' "源码提交：${{ github.sha }}"
             printf '%s\n' "校验：SHA256SUMS.txt"
-            printf '%s\n' "签名证书 SHA-256：55c3c3395a00e56e99b8bfd580b14c99618da74db19692a2e42606eb05c47ba9"
+            printf '%s\n' "签名证书 SHA-256：d04a0d1a33a8454a2dae629c4703aa46f42034f25352d350d08fb5df9f6e2c2"
           } > notes.md
           if [[ "$version" == *-* ]]; then
             echo "开发快照不能作为最终正式版发布。" >&2

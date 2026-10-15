@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected='d04a0d1a33a8454a2dae629c4703aa46f42034f25352d350d08fb5df9f6e2c2'
+          expected='d04a0d1a33a8454a2dae629c4703aa46f42034f25352d350d08ffb5df9f6e2c2'
           apksigner=$(find "${ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -n1)
           test -n "$apksigner"
           for apk in dist/android/*.apk; do
@@ -122,7 +122,7 @@ jobs:
             printf '%s\n' "- *-x86_64.apk：模拟器"
             printf '\n%s\n' "源码提交：${{ github.sha }}"
             printf '%s\n' "校验：SHA256SUMS.txt"
-            printf '%s\n' "签名证书 SHA-256：d04a0d1a33a8454a2dae629c4703aa46f42034f25352d350d08fb5df9f6e2c2"
+            printf '%s\n' "签名证书 SHA-256：d04a0d1a33a8454a2dae629c4703aa46f42034f25352d350d08ffb5df9f6e2c2"
           } > notes.md
           if [[ "$version" == *-* ]]; then
             echo "开发快照不能作为最终正式版发布。" >&2

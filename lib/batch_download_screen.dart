@@ -107,7 +107,7 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
                               items: [
                                 const DropdownMenuItem(
                                   value: 0,
-                                  child: Text('自动 · 优先高清'),
+                                  child: Text('自动 · 优先 H.264'),
                                 ),
                                 for (final quality in [1080, 720, 480])
                                   DropdownMenuItem(

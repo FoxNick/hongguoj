@@ -919,7 +919,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
                 ])
                   RemoteButton(
                     key: ValueKey('tv-quality-$value'),
-                    label: value == 0 ? '自动（优先高清）' : '${value}P',
+                    label: value == 0 ? '自动（优先 H.264）' : '${value}P',
                     selected: value == quality,
                     onPressed: () => Navigator.pop(
                       context,

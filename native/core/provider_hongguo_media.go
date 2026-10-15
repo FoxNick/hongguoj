@@ -437,7 +437,7 @@ func (downloader *Downloader) resolveHongguoMultiMedia(ctx context.Context, vide
 	var keyErr error
 	type scoredMedia struct {
 		media providerMedia
-		score int
+		rank  int
 	}
 	var choices []scoredMedia
 	for _, row := range rows {
@@ -473,11 +473,8 @@ func (downloader *Downloader) resolveHongguoMultiMedia(ctx context.Context, vide
 		}
 		height := hongguoMediaQualityNumber(row.quality)
 		media.Quality = height
-		score := height * 10
-		if codec == "h264" || codec == "avc1" {
-			score++
-		}
-		choices = append(choices, scoredMedia{media: media, score: score})
+		media.Codec = codec
+		choices = append(choices, scoredMedia{media: media, rank: providerCodecRank(codec)})
 	}
 	if len(choices) == 0 {
 		if keyErr != nil {
@@ -485,7 +482,12 @@ func (downloader *Downloader) resolveHongguoMultiMedia(ctx context.Context, vide
 		}
 		return providerMedia{}, errors.New("红果未返回兼容的媒体，已跳过不支持的编码")
 	}
-	sort.SliceStable(choices, func(i, j int) bool { return choices[i].score > choices[j].score })
+	sort.SliceStable(choices, func(i, j int) bool {
+		if choices[i].rank != choices[j].rank {
+			return choices[i].rank < choices[j].rank
+		}
+		return choices[i].media.Quality > choices[j].media.Quality
+	})
 	selected := choices[0].media
 	for _, choice := range choices {
 		selected.Variants = append(selected.Variants, choice.media)

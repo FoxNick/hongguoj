@@ -35,7 +35,7 @@ func TestHongguoBackupAddressesAndCodecAlternatives(t *testing.T) {
 	}
 	want := []string{
 		"https://media.test/main.mp4?token=a%2Fb", "https://backup.test/main.mp4?token=unchanged",
-		"https://third.test/main.mp4", "https://media.test/hevc.mp4", "https://media.test/low.mp4",
+		"https://third.test/main.mp4", "https://media.test/low.mp4", "https://media.test/hevc.mp4",
 	}
 	if !reflect.DeepEqual(addresses, want) || !reflect.DeepEqual(choices.qualities, []int{1080, 720}) {
 		t.Fatalf("wrong fallback order: %+v; qualities=%v", addresses, choices.qualities)
@@ -48,6 +48,31 @@ func TestHongguoBackupAddressesAndCodecAlternatives(t *testing.T) {
 	}
 	if selected := nativePlaybackChoices(media, 2160); len(selected.media) != len(want) {
 		t.Fatal("an unavailable quality should use the episode's available routes")
+	}
+}
+
+func TestHongguoRoutesPreferH264OverHigherQualityHevc(t *testing.T) {
+	media, err := selectHongguoAppMedia(map[string]any{"video_list": []any{
+		map[string]any{"main_url": "https://media.test/hevc-1080.mp4", "video_meta": map[string]any{"codec_type": "hevc", "definition": "1080p"}},
+		map[string]any{"main_url": "https://media.test/h264-720.mp4", "video_meta": map[string]any{"codec_type": "h264", "definition": "720p"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	choice := nativePlaybackChoices(media, 0)
+	if len(choice.media) != 2 || !strings.HasSuffix(choice.media[0].URL, "h264-720.mp4") || !strings.HasSuffix(choice.media[1].URL, "hevc-1080.mp4") {
+		t.Fatalf("playback must start on h264 and keep hevc as fallback: %+v", choice.media)
+	}
+	if !reflect.DeepEqual(choice.qualities, []int{1080, 720}) {
+		t.Fatalf("quality list changed: %v", choice.qualities)
+	}
+	manual := nativePlaybackChoices(media, 1080)
+	if len(manual.media) != 1 || !strings.HasSuffix(manual.media[0].URL, "hevc-1080.mp4") {
+		t.Fatalf("explicit 1080p must still reach the hevc route: %+v", manual.media)
+	}
+	download := nativeDownloadChoices(media, 0)
+	if len(download.media) != 2 || !strings.HasSuffix(download.media[0].URL, "hevc-1080.mp4") {
+		t.Fatalf("downloads must keep the highest resolution first: %+v", download.media)
 	}
 }
 

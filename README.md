@@ -2,7 +2,21 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 使用同一 Android 应用，保留原项目站源、播放和下载功能；“无广爽看”是此项目的使用体验定位，具体片源和广告情况取决于内容来源，不保证所有资源无广告。
 
-当前源码版本为 **0.2.2+34**（下载解密、合并导出 MP4），前一版本为 **0.2.1+33**（更名短句汇、换品牌图、详情页预取提速），再前一版本 **0.2.0+32**（更新频道切换与联系方式），其后为 **0.1.9+31**（红果取流签名补全，用户已确认真机可播），再后 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线 **0.1.7+29**（手机顶部弹幕更新），正式基线 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+当前源码版本为 **0.2.3+35**（红果取流编码优先、版本号偏移修复），前一版本为 **0.2.2+34**（下载解密、合并导出 MP4），再前一版本为 **0.2.1+33**（更名短句汇、换品牌图、详情页预取提速），再前 **0.2.0+32**（更新频道切换与联系方式），其后为 **0.1.9+31**（红果取流签名补全，用户已确认真机可播），再后 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线 **0.1.7+29**（手机顶部弹幕更新），正式基线 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+
+## 0.2.3 红果取流编码优先与版本号偏移修复（开发快照，待验证）
+
+**问题**：红果同一集通常同时给出 H.264 与 HEVC 的多档清晰度，取流原先按清晰度排序、只有同清晰度时才偏好 H.264，因此默认起播会落在 HEVC；部分设备 HEVC 硬解花屏或黑屏，软解又吃 CPU。
+
+**播放改为编码优先**：[provider_media.go](native/core/provider_media.go) 新增 `providerCodecRank`（h264/avc/avc1 = 0、未知 = 1、hevc/bytevc1/hvc1/hev1/h265 = 2、bytevc2 = 3，与 `abai569/hongguoTV` 的 `codecRank` 一致）与 `providerMedia.Codec` 字段；[provider_hongguo_media.go](native/core/provider_hongguo_media.go) 的 `multi_video_model` 取流与 [provider_hongguo_native_media.go](native/core/provider_hongguo_native_media.go) 的原生接口取流都改为「编码 rank 升序 → 同编码内清晰度降序」。关键是 [app_playback_routes.go](native/core/app_playback_routes.go)：该函数原先会把候选按清晰度重排、覆盖掉取自流时的编码偏好，现在播放与整集缓存按编码优先排序，更高清晰度的 HEVC 保留为回落线路。
+
+**下载仍优先高清**：下载改走新增的 `nativeDownloadChoices`，排序保持清晰度降序，自动档不会因为编码偏好降低分辨率；其余站源未设置编码信息，排序行为不变。
+
+**显式选清晰度仍然生效**：选 1080P 时会直接落到该清晰度的 HEVC 线路。播放清晰度菜单与下载偏好的「自动」文案由「优先高清」改为「优先 H.264」，与实际策略一致。
+
+**验证**：`go vet ./...` 通过；`go test ./...` 仅 `TestLegacyAnonymousCatalogAndSessionReuse` 失败，已用 `git stash` 在改动前复现同样的失败，确认与本次改动无关；新增 `TestHongguoRoutesPreferH264OverHigherQualityHevc` 覆盖播放编码优先、显式清晰度、下载高清优先三种行为。`dart analyze lib test packages/video_player_android/lib` 返回 0，无 error / warning，改动文件无告警。**版本号偏移修复**：应用内「检查更新」自 0.2.0 起恒定显示「已是最新稳定版本」，与签名和网络无关。根因是 `flutter build apk --split-per-abi` 会按 ABI 叠加 versionCode（armeabi-v7a +1000、arm64-v8a +2000、x86_64 +4000），用 aapt2 实测 0.2.1 的 APK versionCode 为 2033、0.2.2 为 2034；而 0.2.0 的更新器把 Release 构建号当作完整 versionCode（`code = build`，如 34），与已安装的 2034 比较时 `34 <= 2034` 恒成立，于是无论发多少版都判定为无更新。项目原有的 `updateAbiOffsets` 偏移计算在 0.2.0 被误删——当时依据 `pubspec.yaml` 的构建号推断「偏移从未生效」，属从源码推断而非实测 APK，判断有误。现恢复 [app_updates.dart](lib/app_updates.dart) 的 `code = offset + build`、`InstalledApp` 的架构白名单，[UpdateValidation.java](android/app/src/main/java/com/hongguo/tv/UpdateValidation.java) 恢复「已安装与待安装 versionCode 都必须落在 `offset+1 … offset+999`」的校验，两处测试断言同步恢复为带偏移形式；`flutter analyze lib test` 返回 0，无 error / warning。**0.2.0 / 0.2.1 / 0.2.2 三个版本的应用内更新均不可用，需手动安装 0.2.3 一次，从 0.2.3 起应用内更新才真正可用**（验证方式：安装 0.2.2 后检查更新应能发现 0.2.3）。
+
+本轮**未在本地编译、未出包、未在真机验证**：H.264 优先能否减少黑屏与花屏、以及 720P H.264 与 1080P HEVC 的画质取舍需实机确认。
 
 ## 0.2.2 下载解密与合并导出 MP4（开发快照，待验证）
 

@@ -23,6 +23,14 @@ type nativePlaybackChoice struct {
 }
 
 func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoice {
+	return nativeChoices(media, quality, false)
+}
+
+func nativeDownloadChoices(media providerMedia, quality int) nativePlaybackChoice {
+	return nativeChoices(media, quality, true)
+}
+
+func nativeChoices(media providerMedia, quality int, resolutionFirst bool) nativePlaybackChoice {
 	choice := nativePlaybackChoice{qualities: []int{}}
 	seen := map[string]bool{}
 	qualities := map[int]bool{}
@@ -41,7 +49,16 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 			qualities[option.Quality] = true
 		}
 	}
-	sort.SliceStable(choice.media, func(i, j int) bool { return choice.media[i].Quality > choice.media[j].Quality })
+	sort.SliceStable(choice.media, func(i, j int) bool {
+		left, right := choice.media[i], choice.media[j]
+		if !resolutionFirst {
+			leftRank, rightRank := providerCodecRank(left.Codec), providerCodecRank(right.Codec)
+			if leftRank != rightRank {
+				return leftRank < rightRank
+			}
+		}
+		return left.Quality > right.Quality
+	})
 	for value := range qualities {
 		choice.qualities = append(choice.qualities, value)
 	}

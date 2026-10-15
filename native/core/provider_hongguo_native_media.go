@@ -64,7 +64,7 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 	var keyErr error
 	type scoredMedia struct {
 		media providerMedia
-		score int
+		rank  int
 	}
 	var choices []scoredMedia
 	for _, row := range variants {
@@ -96,17 +96,19 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 			height = width
 		}
 		media.Quality = height
-		quality := height * 10
-		if codec == "h264" || codec == "avc1" {
-			quality++
-		}
+		media.Codec = codec
 		for _, address := range addresses {
 			media.URL = address
-			choices = append(choices, scoredMedia{media: media, score: quality})
+			choices = append(choices, scoredMedia{media: media, rank: providerCodecRank(codec)})
 		}
 	}
 	if len(choices) > 0 {
-		sort.SliceStable(choices, func(i, j int) bool { return choices[i].score > choices[j].score })
+		sort.SliceStable(choices, func(i, j int) bool {
+			if choices[i].rank != choices[j].rank {
+				return choices[i].rank < choices[j].rank
+			}
+			return choices[i].media.Quality > choices[j].media.Quality
+		})
 		selected := choices[0].media
 		for _, choice := range choices {
 			selected.Variants = append(selected.Variants, choice.media)

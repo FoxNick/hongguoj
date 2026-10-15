@@ -519,7 +519,7 @@ func (manager *nativeDownloads) transfer(ctx context.Context, job nativeDownload
 	if err != nil {
 		return nativeDownloadResult{}, err
 	}
-	choices := nativePlaybackChoices(media, job.Quality).media
+	choices := nativeDownloadChoices(media, job.Quality).media
 	if len(choices) == 0 {
 		return nativeDownloadResult{}, errors.New("该集没有可用的下载地址")
 	}

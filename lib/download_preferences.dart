@@ -8,7 +8,7 @@ class DownloadPreferences {
   final int quality;
   final bool includeVip;
   final bool mergeH264;
-  String get qualityLabel => quality == 0 ? '自动 · 优先高清' : '${quality}P';
+  String get qualityLabel => quality == 0 ? '自动 · 优先 H.264' : '${quality}P';
 
   DownloadPreferences copyWith({
     int? quality,

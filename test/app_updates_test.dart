@@ -5,7 +5,7 @@ import 'package:duanju_app/app_updates.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const installed = InstalledApp(version: '0.1.5', code: 27, abi: 'arm64-v8a');
+const installed = InstalledApp(version: '0.1.5', code: 2027, abi: 'arm64-v8a');
 Map<String, dynamic> releaseJson({
   String abi = 'arm64-v8a',
   int build = 28,
@@ -72,7 +72,7 @@ class FakeUpdatePlatform implements UpdatePlatform {
   String installResult = 'cancelled';
   InstalledApp app = const InstalledApp(
     version: '0.1.5',
-    code: 27,
+    code: 2027,
     abi: 'arm64-v8a',
   );
   Completer<InstalledApp>? installedGate;
@@ -108,10 +108,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   group('release policy', () {
     test('selects exact installed ABI and increments actual code', () {
-      for (final abi in updateSupportedAbis) {
+      for (final abi in updateAbiOffsets.keys) {
         final app = InstalledApp(
           version: '0.1.2-dev.1',
-          code: 27,
+          code: updateAbiOffsets[abi]! + 27,
           abi: abi,
         );
         final candidate = AppRelease.parse(releaseJson(abi: abi), app)!;

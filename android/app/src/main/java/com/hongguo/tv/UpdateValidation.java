@@ -20,7 +20,9 @@ public final class UpdateValidation {
         require(installedSigners.size() == 1 && installedSigners.contains(CERTIFICATE)
                 && installedSigners.equals(archiveSigners), "安装包签名与当前正式版不匹配");
         require(archiveCode > installedCode && archiveCode == expectedCode, "安装包版本不是预期的新版本");
-        require(offset(installedAbi) > 0, "安装包版本编号与架构不匹配");
+        int offset = offset(installedAbi);
+        require(offset > 0 && installedCode > offset && installedCode < offset + 1000
+                && archiveCode > offset && archiveCode < offset + 1000, "安装包版本编号与架构不匹配");
         require(installedAbi.equals(requestedAbi) && archiveAbis.size() == 1 && archiveAbis.contains(installedAbi), "安装包架构与已安装应用不匹配");
     }
 

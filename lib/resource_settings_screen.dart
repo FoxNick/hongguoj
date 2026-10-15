@@ -33,7 +33,7 @@ class DownloadPreferencesScreen extends StatelessWidget {
                     for (final value in DownloadPreferences.qualities)
                       DropdownMenuItem(
                         value: value,
-                        child: Text(value == 0 ? '自动 · 优先高清' : '${value}P'),
+                        child: Text(value == 0 ? '自动 · 优先 H.264' : '${value}P'),
                       ),
                   ],
                   onChanged: !store.canDownload

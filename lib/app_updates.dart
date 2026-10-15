@@ -13,7 +13,14 @@ const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const updateMaximumBytes = 256 * 1024 * 1024;
-const updateSupportedAbis = {'armeabi-v7a', 'arm64-v8a', 'x86_64'};
+
+/// `flutter build apk --split-per-abi` 会按 ABI 叠加 versionCode，
+/// 因此已安装版本与 Release 构建号都必须加上对应偏移再比较。
+const updateAbiOffsets = {
+  'armeabi-v7a': 1000,
+  'arm64-v8a': 2000,
+  'x86_64': 4000,
+};
 
 /// GitHub 加速镜像：地址按「镜像前缀 + 原始 GitHub 地址」拼接。
 ///
@@ -70,7 +77,7 @@ class InstalledApp {
         code is! int ||
         code <= 0 ||
         abi is! String ||
-        !updateSupportedAbis.contains(abi)) {
+        !updateAbiOffsets.containsKey(abi)) {
       throw const FormatException('无法确认已安装版本与架构');
     }
     return InstalledApp(version: version, code: code, abi: abi);
@@ -104,12 +111,11 @@ class AppRelease {
     final match = RegExp(r'^app-v(\d+\.\d+\.\d+)-(\d+)$').firstMatch(tag);
     if (match == null) throw const FormatException('版本标签无法识别');
     final build = int.parse(match[2]!);
-    if (!updateSupportedAbis.contains(installed.abi) ||
-        build < 1 ||
-        build >= 1000) {
+    final offset = updateAbiOffsets[installed.abi];
+    if (offset == null || build < 1 || build >= 1000) {
       throw const FormatException('版本编号或设备架构不受支持');
     }
-    final code = build;
+    final code = offset + build;
     if (code <= installed.code) return null;
     final version = match[1]!;
     final name = 'HongguoTV-$version-${installed.abi}.apk';

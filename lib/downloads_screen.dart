@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'download_collections.dart';
-import 'local_store.dart';
 import 'local_media_screen.dart';
+import 'local_store.dart';
+import 'media_library.dart';
+import 'merge_queue_screen.dart';
 import 'models.dart';
 import 'player_screen.dart';
 import 'settings_screen.dart';
@@ -102,11 +104,62 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     }
   }
 
-  void _message(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+  void _message(String message, {String? action, VoidCallback? onAction}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: action == null || onAction == null
+            ? null
+            : SnackBarAction(label: action, onPressed: onAction),
+      ),
+    );
+  }
+
+  void _openMergeQueue() {
+    final library = MediaLibrary.current;
+    if (!mounted || library == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MergeQueueScreen(
+          library: library,
+          repository: widget.repository,
+          store: widget.store,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _mergeCollection(DownloadCollection collection) async {
+    if (_busy || !_allowed) return;
+    final library = MediaLibrary.current;
+    if (library == null) {
+      _message('本地媒体尚未就绪，请稍后重试');
+      return;
+    }
+    final completed = collection.jobs.where((job) => job.completed).toList();
+    if (completed.length < 2) {
+      _message('《${collection.drama.title}》已下载不足两集，无法合并');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final added = await library.merges.enqueue([completed]);
+      if (!mounted) return;
+      if (added == 0) {
+        _message('《${collection.drama.title}》已在合并队列中', action: '查看', onAction: _openMergeQueue);
+        return;
+      }
+      _message(
+        '《${collection.drama.title}》共 ${completed.length} 集已加入合并队列',
+        action: '查看',
+        onAction: _openMergeQueue,
+      );
+    } catch (error) {
+      if (mounted) _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -461,6 +514,8 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           onSelected: (value) {
             if (value == 'update') {
               _update(collection.drama);
+            } else if (value == 'merge') {
+              _mergeCollection(collection);
             } else if (value == 'select') {
               _select(collection.jobs);
             } else {
@@ -473,6 +528,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               enabled: !_updater.busy,
               child: const Text('更新本剧 · 补充新增与缺失'),
             ),
+            const PopupMenuItem(value: 'merge', child: Text('一键合并本剧')),
             const PopupMenuItem(value: 'select', child: Text('选择本合集')),
             const PopupMenuItem(value: 'pause', child: Text('暂停本合集')),
             const PopupMenuItem(value: 'resume', child: Text('继续 / 重试本合集')),

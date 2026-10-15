@@ -2,7 +2,23 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 使用同一 Android 应用，保留原项目站源、播放和下载功能；“无广爽看”是此项目的使用体验定位，具体片源和广告情况取决于内容来源，不保证所有资源无广告。
 
-当前源码候选版本为 **0.1.7+29**（手机顶部弹幕更新，尚待本轮 Flutter 验证 / 构建，未发布），前一正式基线为 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。0.1.7 候选分支推送会自动运行只读权限的测试、静态检查和独立 debug 变体编译验证，不上传安装包、不读取正式签名、不发布 Release。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+当前源码版本为 **0.1.9+31**（红果取流签名补全，待构建与实机验证），前一版本为 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线为 **0.1.7+29**（手机顶部弹幕更新），再前一正式基线为 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+
+## 0.1.9 红果取流签名补全（开发快照，待验证）
+
+线上反馈红果取流失败，播放日记显示三条取流路径同时失效：App 接口未返回有效数据、网页入口未提供公开播放地址、备用接口未返回可用媒体与密钥。
+
+代码核对确认根因是 **App 侧签名不完整**：原实现只发送简化 `X-Gorgon` 与 `X-Khronos`，缺少字节系必需的 `X-Helios`、`X-Medusa`、`X-Argus`、`X-Ladon`；同时仍在调用旧的 `video_model` 接口，未跟进 `multi_video_model` 与 `fallback_api` 两段式取流，也没有 spade 播放地址解密。
+
+本版自 `hongguo.cjs`（DRPY 插件）移植全套签名到 Go，新增 `provider_hongguo_medusa_tables.go`、`provider_hongguo_medusa_proto.go`、`provider_hongguo_medusa_hash.go`、`provider_hongguo_medusa_cipher.go`、`provider_hongguo_medusa.go`、`provider_hongguo_media.go`：
+
+- **X-Gorgon** 改用变种 RC4（KSA 只覆写不交换）与半字节变换；**X-Helios** 走 34 轮表扩展与 64 位异或链；**X-Medusa** 走手写 protobuf + 变种 MD5 三分支哈希 + 自研 AES 变体（S 盒按 `khronos` 低两位分四段）；**X-Argus**/**X-Ladon** 使用取流接口的时间戳简版。
+- 请求参数按客户端原始顺序拼接（Go 的 map 会重排键，故改用有序切片），URL 编码对齐 `encodeURIComponent`（`+` 转 `%20`、`%2A` 保留 `*`）。
+- `_rticket` 逐毫秒抖动，绕过服务端不接受的 branch 1 签名变体。
+- 取流改为 `multi_video_model` 取模型、`fallback_api` 取清晰度列表，新增 spade 播放地址解密（AES-128-CBC + SHA-512 派生），`spade_a` 仍走既有 CENC 密钥派生。
+- 原 `video_model` 逻辑保留为 `resolveHongguoLegacyMedia`，新路径失败时自动回退，三级取流顺序不变。
+
+本轮**未在本地编译或运行测试**（按既定流程只做源码整理与归档），也未连接真实手机 / TV，仅完成逐行移植核对与符号唯一性检查。位序或常量偏差会导致接口拒绝，需以构建后的实机播放结果为准，不将源码生成等同于可用成品。
 
 ## 0.1.7 手机顶部弹幕（开发候选，尚未发布）
 

@@ -16,6 +16,18 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("红果视频 ID 无效")
 	}
+	media, err := downloader.resolveHongguoMultiMedia(ctx, videoID)
+	if err == nil {
+		return media, nil
+	}
+	legacy, legacyErr := downloader.resolveHongguoLegacyMedia(ctx, videoID)
+	if legacyErr == nil {
+		return legacy, nil
+	}
+	return providerMedia{}, fmt.Errorf("红果 App 接口未返回有效数据：%v；兼容入口：%v", err, legacyErr)
+}
+
+func (downloader *Downloader) resolveHongguoLegacyMedia(ctx context.Context, videoID string) (providerMedia, error) {
 	payload := map[string]any{
 		"video_id": videoID, "content_type": 1,
 		"biz_param": map[string]any{"need_all_video_definition": true, "video_platform": 3},

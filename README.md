@@ -2,7 +2,21 @@
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 使用同一 Android 应用，保留原项目站源、播放和下载功能；“无广爽看”是此项目的使用体验定位，具体片源和广告情况取决于内容来源，不保证所有资源无广告。
 
-当前源码版本为 **0.2.1+33**（更名短句汇、换品牌图、详情页预取提速），前一版本为 **0.2.0+32**（更新频道切换与联系方式），再前一版本 **0.1.9+31**（红果取流签名补全，用户已确认真机可播），其后为 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线 **0.1.7+29**（手机顶部弹幕更新），正式基线 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+当前源码版本为 **0.2.2+34**（下载解密、合并导出 MP4），前一版本为 **0.2.1+33**（更名短句汇、换品牌图、详情页预取提速），再前一版本 **0.2.0+32**（更新频道切换与联系方式），其后为 **0.1.9+31**（红果取流签名补全，用户已确认真机可播），再后 **0.1.8+30**（迁回 12 个短剧站源），历史候选基线 **0.1.7+29**（手机顶部弹幕更新），正式基线 **0.1.6+28**，新增 Android 应用内更新，补充手机竖屏点按和快进后恢复播放、Android 返回与系统栏兼容性，以及内置 Fluent 3D 弹幕表情，保留自动连播末帧保留，构建、签名与发布状态以对应 Release 和校验报告为准。历史稳定版 [0.1.3](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.3-24) 仍可下载。正式构建与发布工作流仅接受手动触发。原项目说明、历史改动和依赖许可见下文及各依赖目录。
+
+## 0.2.2 下载解密与合并导出 MP4（开发快照，待验证）
+
+**问题**：此前下载保存的是 CENC 加密的原始分片，只能在应用内经本地流服务解密播放；拿出去是密文，合并产物又是 `.mkv`，等于下载了却用不上。
+
+**下载即解密**：新增 [app_download_cenc.go](native/core/app_download_cenc.go)，复用播放链路上已有的 CENC 能力（`parseCENCMP4` + `cencIndex.transform`，base 取 0 即整文件解密），在 [app_download_transfer.go](native/core/app_download_transfer.go) 落盘后把 `media.mp4` 还原为明文。全部候选解密成功时清空下载记录里的密钥，本地播放与合并随即走明文路径；结构不支持时保持原文件不动，不阻断下载。
+
+**合并产物改为 MP4**：合并输出原先硬编码为 `full.mkv`（[media_merge.dart](lib/media_merge.dart)），现改为 `full.mp4`，并补 `-movflags +faststart`；未转码的 HEVC 额外加 `-tag:v hvc1` 以兼容 Apple 系与部分剪辑软件。Emby 导出与归一化中间文件仍用 mkv，不受影响。
+
+**合并转码 H.264**：红果等源是 HEVC 编码，`MergePlan` 原有策略是「统一到多数派编码」——全集同为 HEVC 时不转码，产物仍是 HEVC，剪辑软件兼容性差。新增 [下载偏好](lib/resource_settings_screen.dart) 里的「合并时转码为 H.264」开关（默认开启，属 [download_preferences.dart](lib/download_preferences.dart) 的 `mergeH264`），开启后所有分集统一走 libx264 并把像素格式规范为 `yuv420p`（源为 10bit 时必需），输出标准 H.264 MP4；关闭则保持原有的原编码直拼，速度更快。
+
+**已有下载需重新下载**：已经存到磁盘的加密分片不会被自动转换，需删除后重新下载才能得到明文产物。
+
+本轮**未在本地编译或运行测试**。解密后的文件能否被系统播放器与剪辑软件正常导入、HEVC 转 H.264 的画质与耗时、以及合并产物在剪辑软件中的实际表现均需实机确认。
 
 ## 0.2.1 更名短句汇、品牌图与详情页预取（开发快照，待验证）
 
@@ -755,14 +769,13 @@ flutter drive --driver=test_driver/playback.dart --target=integration_test/playb
 
 结果在 `build/device-test/results/`；结束后停服务并 `adb reverse --remove tcp:38473`。
 
-### 源码同步
+### 源码校验
 
 ~~~sh
 python3 scripts/finish_task.py --message "本次实际完成的变更"
-python3 scripts/sync_source.py --check
 ~~~
 
-脚本只同步纯源码到同级 `../guoapp`，并生成 `真果·鉴-YYYYMMDDHHMM.zip` 源码压缩包；不执行 Git 提交、分支或推送。
+脚本按收录规则统计并校验干净源码清单，不生成副本或压缩包，不执行 Git 提交、分支或推送。需要临时镜像时用 `python3 scripts/sync_source.py --destination <目录>` 显式指定目标。
 
 ## 目录结构
 

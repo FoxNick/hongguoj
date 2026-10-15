@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/aes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -125,13 +126,33 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 	if err := ctx.Err(); err != nil {
 		return nativeDownloadResult{}, err
 	}
+	candidates, decrypted := 0, 0
+	if len(media.CENCKey) == aes.BlockSize {
+		for _, asset := range bundle.assets {
+			if asset.data != nil || !nativeDownloadCENCMedia(asset.name) {
+				continue
+			}
+			candidates++
+			ok, err := nativeDecryptDownloadedCENC(filepath.Join(directory, asset.name), media.CENCKey)
+			if err != nil {
+				return nativeDownloadResult{}, err
+			}
+			if ok {
+				decrypted++
+			}
+		}
+	}
 	for name, body := range bundle.playlists {
 		if err := nativeDownloadWrite(filepath.Join(directory, name), body); err != nil {
 			return nativeDownloadResult{}, err
 		}
 	}
 	manager.progress(job.ID, completedBytes, completedBytes, 1)
-	return nativeDownloadResult{file: entry, key: hex.EncodeToString(media.CENCKey), quality: bundle.quality}, nil
+	key := hex.EncodeToString(media.CENCKey)
+	if candidates > 0 && candidates == decrypted {
+		key = ""
+	}
+	return nativeDownloadResult{file: entry, key: key, quality: bundle.quality}, nil
 }
 
 func nativeDownloadValidator(header http.Header) string {

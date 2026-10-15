@@ -235,7 +235,10 @@ extension MediaMergeOperations on MediaLibrary {
       probes.add(probe);
       prepared.add(target);
     }
-    final plan = MergePlan.create(probes);
+    final plan = MergePlan.create(
+      probes,
+      forceH264: store.downloadPreferences.mergeH264,
+    );
     final planKey = _mergeDigest([
       plan.video.videoSignature,
       plan.audio?.audioSignature,
@@ -243,6 +246,7 @@ extension MediaMergeOperations on MediaLibrary {
       plan.audioChanges,
       plan.canonicalAac,
       plan.transportStream,
+      plan.forceH264,
     ]);
     if (checkpoint['plan'] != planKey) {
       parts.clear();
@@ -288,7 +292,7 @@ extension MediaMergeOperations on MediaLibrary {
       'ffconcat version 1.0\n${normalized.map(concatFileLine).join('\n')}\n',
       flush: true,
     );
-    final output = path.join(temporary.path, 'full.mkv');
+    final output = path.join(temporary.path, 'full.mp4');
     final duration = probes.fold<double>(
       0,
       (sum, probe) => sum + probe.duration,
@@ -307,6 +311,12 @@ extension MediaMergeOperations on MediaLibrary {
         '0:a:0?',
         '-c',
         'copy',
+        if (!plan.forceH264 && plan.video.videoCodec == 'hevc') ...[
+          '-tag:v',
+          'hvc1',
+        ],
+        '-movflags',
+        '+faststart',
         '-avoid_negative_ts',
         'make_zero',
         output,
@@ -321,7 +331,7 @@ extension MediaMergeOperations on MediaLibrary {
     final checked = await executor.probe(output);
     verifyMediaDuration(checked, duration);
     await _decodeOutput(output, checked.duration);
-    final relative = path.join('library', id, 'full.mkv');
+    final relative = path.join('library', id, 'full.mp4');
     final target = File(path.join(root!, relative));
     await target.parent.create(recursive: true);
     _check();

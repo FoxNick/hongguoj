@@ -52,6 +52,7 @@ class MergePlan {
     this.audioChanges,
     this.transportStream,
     this.canonicalAac,
+    this.forceH264,
   );
   final MediaProbe video;
   final MediaProbe? audio;
@@ -59,6 +60,7 @@ class MergePlan {
   final List<bool> audioChanges;
   final bool transportStream;
   final bool canonicalAac;
+  final bool forceH264;
   int get videoTranscodes => videoChanges.where((change) => change).length;
   int get audioTranscodes => audioChanges.where((change) => change).length;
 
@@ -82,7 +84,7 @@ class MergePlan {
     return ordered.first.first;
   }
 
-  factory MergePlan.create(List<MediaProbe> probes) {
+  factory MergePlan.create(List<MediaProbe> probes, {bool forceH264 = false}) {
     if (probes.length < 2 ||
         probes.any((p) => p.videoCodec.isEmpty || p.duration <= 0)) {
       throw AppFailure('请至少选择两集完整视频');
@@ -92,16 +94,20 @@ class MergePlan {
     final audio = withAudio.isEmpty
         ? null
         : _majority(withAudio, (p) => p.audioSignature);
-    final vc = probes
-        .map((p) => p.videoSignature != video.videoSignature)
-        .toList();
+    final vc = forceH264
+        ? List<bool>.filled(probes.length, true)
+        : probes
+              .map((p) => p.videoSignature != video.videoSignature)
+              .toList();
     var ac = probes
         .map((p) => audio != null && p.audioSignature != audio.audioSignature)
         .toList();
     final canonicalAac =
         audio?.audio['codec_name'] == 'aac' && ac.any((change) => change);
     if (canonicalAac) ac = List.filled(probes.length, true);
-    if (vc.any((v) => v) && !{'h264', 'hevc'}.contains(video.videoCodec)) {
+    if (!forceH264 &&
+        vc.any((v) => v) &&
+        !{'h264', 'hevc'}.contains(video.videoCodec)) {
       throw AppFailure('多数分集为 ${video.videoCodec}，当前不能将其他格式转换为此编码；原文件已保留。');
     }
     for (var i = 0; i < probes.length; i++) {
@@ -131,16 +137,26 @@ class MergePlan {
       throw AppFailure('多数音轨格式暂不支持统一编码，可先按分集导出。');
     }
     final transport =
+        !forceH264 &&
         {'h264', 'hevc'}.contains(video.videoCodec) &&
         (audio == null ||
             {'aac', 'ac3', 'eac3', 'mp2'}.contains(audio.audio['codec_name']));
-    if (!transport &&
+    if (!forceH264 &&
+        !transport &&
         probes.any(
           (p) => p.video['extradata_hash'] != video.video['extradata_hash'],
         )) {
       throw AppFailure('视频编码参数不适合直接拼接，可保留分集并导出 Emby。');
     }
-    return MergePlan._(video, audio, vc, ac, transport, canonicalAac);
+    return MergePlan._(
+      video,
+      audio,
+      vc,
+      ac,
+      transport,
+      canonicalAac,
+      forceH264,
+    );
   }
 
   List<String> normalizeArguments(
@@ -169,12 +185,19 @@ class MergePlan {
     if (videoChanges[index]) {
       final width = intValue(video.video['width']),
           height = intValue(video.video['height']);
-      final pixel = video.video['pix_fmt'] as String? ?? 'yuv420p';
+      final pixel = forceH264
+          ? 'yuv420p'
+          : video.video['pix_fmt'] as String? ?? 'yuv420p';
       final aspect = (video.video['sample_aspect_ratio'] as String? ?? '1:1')
           .replaceAll(':', '/');
+      final encoder = forceH264
+          ? 'libx264'
+          : video.videoCodec == 'hevc'
+          ? 'libx265'
+          : 'libx264';
       args.addAll([
         '-c:v',
-        video.videoCodec == 'hevc' ? 'libx265' : 'libx264',
+        encoder,
         '-preset',
         'veryfast',
         '-crf',
@@ -184,7 +207,7 @@ class MergePlan {
         '-vf',
         'scale=$width:$height:force_original_aspect_ratio=decrease,pad=$width:$height:(ow-iw)/2:(oh-ih)/2,setsar=$aspect,format=$pixel',
       ]);
-      if (video.videoCodec == 'hevc') {
+      if (encoder == 'libx265') {
         args.addAll(['-x265-params', 'pools=2:frame-threads=1']);
       }
     } else {

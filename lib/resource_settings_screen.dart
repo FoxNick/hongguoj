@@ -63,6 +63,22 @@ class DownloadPreferencesScreen extends StatelessWidget {
                           ),
                         ),
                 ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  value: preferences.mergeH264,
+                  title: const Text('合并时转码为 H.264'),
+                  subtitle: const Text(
+                    '合并成品改用 H.264，便于导入剪辑软件和在其他设备播放；关闭后直接拼接原编码，速度更快但部分软件无法导入。',
+                  ),
+                  onChanged: !store.canDownload
+                      ? null
+                      : (value) => saveUserChange(
+                          context,
+                          () => store.setDownloadPreferences(
+                            preferences.copyWith(mergeH264: value),
+                          ),
+                        ),
+                ),
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text('偏好保存在当前用户中，应用于下载选集、批量下载和更新本剧。'),

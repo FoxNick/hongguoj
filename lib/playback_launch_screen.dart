@@ -6,6 +6,7 @@ import 'core_bridge.dart';
 import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
+import 'playback_preloader.dart';
 import 'player_screen.dart';
 import 'widgets.dart';
 
@@ -31,6 +32,7 @@ Future<void> openPlaybackDirectly(
   final profileEpoch = store.profileEpoch;
   var cancelled = false;
   var waiting = true;
+  PlaybackPreloader? preloader;
   final loading = DialogRoute<void>(
     context: context,
     barrierDismissible: false,
@@ -107,6 +109,14 @@ Future<void> openPlaybackDirectly(
     final watched = store.watched(mergedDrama.id);
     final index = resumeEpisodeIndex(merged.episodes, watched);
     final episode = merged.episodes[index];
+    // 与页面切换并行预取，进播放页时直接命中，省掉整段取流等待。
+    preloader = PlaybackPreloader(repository);
+    preloader.prepare(
+      merged.drama,
+      episode,
+      quality: store.playbackPreferences.quality,
+      immediate: true,
+    );
     dismissLoading();
     if (episode.vip && mergedDrama.source != SourceSite.dsd.id) {
       final accepted = await showDialog<bool>(
@@ -141,6 +151,7 @@ Future<void> openPlaybackDirectly(
           initialPosition: position,
           repository: repository,
           store: store,
+          preloader: preloader,
         ),
       ),
     );
@@ -157,6 +168,7 @@ Future<void> openPlaybackDirectly(
     ).showSnackBar(SnackBar(content: Text(message)));
   } finally {
     dismissLoading();
+    preloader?.dispose();
     release();
     if (context.mounted &&
         (origin == null || origin.isCurrent) &&

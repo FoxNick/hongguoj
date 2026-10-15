@@ -11,6 +11,7 @@ import 'download_picker.dart';
 import 'downloads_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
+import 'playback_preloader.dart';
 import 'player_screen.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
@@ -49,6 +50,7 @@ class _DetailScreenState extends State<DetailScreen> {
   final _detailScroll = ScrollController();
   bool _initialActionHandled = false;
   late final int _profileEpoch;
+  late final PlaybackPreloader _preloader;
   Widget? get _sourceDiagnostics => widget.repository.supportsSourceManagement
       ? SourceDiagnosticsButton(
           repository: widget.repository,
@@ -61,6 +63,7 @@ class _DetailScreenState extends State<DetailScreen> {
   void initState() {
     super.initState();
     _profileEpoch = widget.store.profileEpoch;
+    _preloader = PlaybackPreloader(widget.repository);
     widget.store.addListener(_onStoreChanged);
     _load();
   }
@@ -79,6 +82,7 @@ class _DetailScreenState extends State<DetailScreen> {
     _detailScroll.dispose();
     widget.store.removeListener(_onStoreChanged);
     _generation++;
+    _preloader.dispose();
     super.dispose();
   }
 
@@ -115,6 +119,7 @@ class _DetailScreenState extends State<DetailScreen> {
             episodePageSize;
       });
       widget.repository.catalogUpdates.publish(merged, retryCover: true);
+      _warmupStart(detail.episodes, merged);
       unawaited(_supplement(merged, generation));
       await saveUserChange(context, () => widget.store.refreshDrama(merged));
       if (mounted &&
@@ -150,6 +155,19 @@ class _DetailScreenState extends State<DetailScreen> {
         retryCover: true,
       );
     }
+  }
+
+  /// 进入详情页即预取最可能播放的那一集：用户在详情页停留期间取流已完成，
+  /// 点播放时直接命中，省掉整段等待。
+  void _warmupStart(List<Episode> episodes, Drama drama) {
+    if (episodes.isEmpty) return;
+    final index = resumeEpisodeIndex(episodes, widget.store.watched(drama.id));
+    _preloader.prepare(
+      drama,
+      episodes[index],
+      quality: widget.store.playbackPreferences.quality,
+      immediate: true,
+    );
   }
 
   Future<void> _supplement(Drama drama, int generation) async {
@@ -280,6 +298,7 @@ class _DetailScreenState extends State<DetailScreen> {
           initialPosition: position,
           repository: widget.repository,
           store: widget.store,
+          preloader: _preloader,
         ),
       ),
     );

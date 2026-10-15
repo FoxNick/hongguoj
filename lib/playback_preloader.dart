@@ -21,8 +21,8 @@ class PlaybackPreloader extends ChangeNotifier {
 
   final AppRepository repository;
   final DateTime Function() _now;
-  final void Function(PlaybackPlan)? onPrepared;
-  final Future<void> Function(PlaybackPlan)? onRelease;
+  void Function(PlaybackPlan)? onPrepared;
+  Future<void> Function(PlaybackPlan)? onRelease;
   PlaybackPlan? _ready;
   _PreloadRequest? _pending;
   String? _identity;
@@ -62,6 +62,10 @@ class PlaybackPreloader extends ChangeNotifier {
     if (loading || _delay != null) return '正在准备下一集';
     return error.isNotEmpty ? '下一集缓冲失败，正在重试' : '播放稳定后持续缓冲下一集';
   }
+
+  /// 是否有预载正在推进（含延迟等待）。上一页刚发起预载就进入播放页时，
+  /// 首集可据此等在途结果，而不是立刻回退到正常取流。
+  bool get hasPending => loading || _delay != null;
 
   String _key(Drama drama, Episode episode, int quality, bool online) =>
       '${drama.id}\u0000${episode.number}\u0000$quality\u0000$online';

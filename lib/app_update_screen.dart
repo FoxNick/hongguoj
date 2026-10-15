@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_build.dart';
 import 'app_layout.dart';
 import 'app_updates.dart';
 
@@ -88,7 +89,7 @@ class AppUpdateScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(24),
                 children: [
                   Text(
-                    '红果TV',
+                    appName,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 8),

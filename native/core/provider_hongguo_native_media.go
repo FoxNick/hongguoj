@@ -18,11 +18,11 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 	}
 	media, err := downloader.resolveHongguoMultiMedia(ctx, videoID)
 	if err == nil {
-		return media, nil
+		return downloader.prepareHongguoPlaylist(ctx, media), nil
 	}
 	legacy, legacyErr := downloader.resolveHongguoLegacyMedia(ctx, videoID)
 	if legacyErr == nil {
-		return legacy, nil
+		return downloader.prepareHongguoPlaylist(ctx, legacy), nil
 	}
 	return providerMedia{}, fmt.Errorf("红果 App 接口未返回有效数据：%v；兼容入口：%v", err, legacyErr)
 }

@@ -52,6 +52,7 @@ class PlayerScreen extends StatefulWidget {
     this.playerFactory,
     this.videoBuilder,
     this.handoff,
+    this.preloader,
   });
   final DramaDetail detail;
   final int initialIndex;
@@ -62,6 +63,9 @@ class PlayerScreen extends StatefulWidget {
   final AppRepository repository;
   final LocalStore store;
   final LanIncomingPlayback? handoff;
+
+  /// 上一页（详情页或加载页）已发起的预载器；首集命中它即可省掉取流等待。
+  final PlaybackPreloader? preloader;
   @visibleForTesting
   final Player Function()? playerFactory;
   @visibleForTesting
@@ -84,6 +88,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final VideoEnhancementController _enhancement;
   late final PlaybackLoader _loader;
   late final PlaybackPreloader _preloader;
+  late final bool _ownsPreloader;
   bool _preloadEnabled = true;
   late final DanmakuController _danmaku;
   int _seekSequence = 0;
@@ -214,27 +219,26 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmakuEnabled = preferences.danmaku;
     _preloadEnabled = true;
     _loader = PlaybackLoader(widget.repository);
-    _preloader = PlaybackPreloader(
-      widget.repository,
-      onPrepared: (plan) {
-        final player = _player;
-        if (!_closed && _foreground && player is LunaExoPlayer) {
-          unawaited(
-            player.prepareNext(
-              Media(plan.url, httpHeaders: plan.headers),
-              identity: plan.session,
-              mediaType: plan.mediaType,
-            ),
-          );
-        }
-      },
-      onRelease: (plan) async {
-        final player = _player;
-        if (player is LunaExoPlayer) {
-          await player.clearPreparedNext(identity: plan.session);
-        }
-      },
-    );
+    _ownsPreloader = widget.preloader == null;
+    _preloader = widget.preloader ?? PlaybackPreloader(widget.repository);
+    _preloader.onPrepared = (plan) {
+      final player = _player;
+      if (!_closed && _foreground && player is LunaExoPlayer) {
+        unawaited(
+          player.prepareNext(
+            Media(plan.url, httpHeaders: plan.headers),
+            identity: plan.session,
+            mediaType: plan.mediaType,
+          ),
+        );
+      }
+    };
+    _preloader.onRelease = (plan) async {
+      final player = _player;
+      if (player is LunaExoPlayer) {
+        await player.clearPreparedNext(identity: plan.session);
+      }
+    };
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
@@ -1265,7 +1269,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final warmedFuture = handoffPlan != null
         ? Future<PlaybackPlan?>.value(handoffPlan)
         : recoveryAction == null && _preloadEnabled && !widget.localOnly
-        ? smooth
+        ? smooth || _preloader.hasPending
               ? _preloader.takeWhenReady(
                   detail.drama,
                   detail.episodes[index],
@@ -1984,7 +1988,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     widget.handoff?.fail('接收端已退出播放');
     widget.store.removeListener(_accessChanged);
     _danmaku.dispose();
-    _preloader.dispose();
+    _preloader.onPrepared = null;
+    _preloader.onRelease = null;
+    if (_ownsPreloader) _preloader.dispose();
     _generation++;
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();

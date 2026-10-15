@@ -492,3 +492,28 @@ func (downloader *Downloader) resolveHongguoMultiMedia(ctx context.Context, vide
 	}
 	return selected, nil
 }
+
+// 取流阶段顺带拉取 m3u8：播放时本机流服务直接返回缓存内容，省掉一次远程往返。
+// 预取失败不阻断播放，交由播放阶段按既有重试处理。
+func (downloader *Downloader) prepareHongguoPlaylist(ctx context.Context, media providerMedia) providerMedia {
+	if media.Playlist != "" || !isProviderHTTPMediaURL(media.URL) {
+		return media
+	}
+	parsed, err := url.Parse(media.URL)
+	if err != nil || !strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
+		return media
+	}
+	playlist, finalURL, err := downloader.fetchMediaPlaylist(ctx, media.URL, media.Referer)
+	if err != nil {
+		return media
+	}
+	if !strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(playlist, "\ufeff")), "#EXTM3U") {
+		return media
+	}
+	media.Playlist = playlist
+	media.URL = finalURL
+	if duration := m3u8Duration(playlist); duration > 0 {
+		media.Duration = duration
+	}
+	return media
+}

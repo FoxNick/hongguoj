@@ -158,7 +158,12 @@ void main() {
       expect(repository.statusRequests, ['hongguo']);
       expect(find.byKey(const ValueKey('source-hongguo')), findsOneWidget);
       for (final source in SourceSite.knownValues.skip(1)) {
-        expect(find.byKey(ValueKey('source-${source.id}')), findsNothing);
+        final card = find.byKey(ValueKey('source-${source.id}'));
+        if (SourceSite.retiredSources.contains(source)) {
+          expect(card, findsOneWidget);
+          continue;
+        }
+        expect(card, findsNothing);
       }
       await tester.pumpWidget(const SizedBox.shrink());
       store.dispose();

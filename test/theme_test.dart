@@ -110,7 +110,7 @@ void main() {
     final repository = FixtureRepository();
     await tester.pumpWidget(DuanjuApp(repository: repository, store: store));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('bottom-nav-1')));
+    await tester.tap(find.text('追剧'));
     await tester.pumpAndSettle();
     expect(find.text('我的追剧 · 0'), findsOneWidget);
     await tester.tap(find.byTooltip('更多'));

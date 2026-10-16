@@ -178,7 +178,7 @@ void main() {
               ? find.byKey(ValueKey('bottom-nav-$tab'))
               : find.descendant(
                   of: find.byType(NavigationRail),
-                  matching: find.text(tab == 1 ? '追剧' : '最近观看'),
+                  matching: find.text(tab == 1 ? '追剧' : '历史'),
                 );
           await tester.tap(destination);
           await tester.pumpAndSettle();

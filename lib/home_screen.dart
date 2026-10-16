@@ -57,7 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasMore = true;
   String? _error;
   int _generation = 0;
-  static const _rankingsTab = 4;
   int _tab = 0;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
@@ -720,9 +719,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 连点「历史」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
   /// 仅多源包（真果鉴）生效；红果鉴单源包无密码功能。
-  /// 导航项顺序：榜单排在首位，其余沿用既有页签编号。
+  /// 导航项顺序与页签编号解耦：历史（编号 2）排在追剧（编号 1）之前。
   List<int> get _navOrder => [
-    _rankingsTab,
+    0,
     2,
     1,
     if (widget.store.canDownload) 3,
@@ -1028,15 +1027,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _refreshCatalog,
                   ),
-                if (_tab != 0)
-                  IconButton(
-                    key: const ValueKey('open-catalog'),
-                    tooltip: '发现',
-                    onPressed: widget.store.sources.isEmpty
-                        ? null
-                        : () => _changeTab(0),
-                    icon: const Icon(Icons.explore_outlined),
-                  ),
                 const AppUpdateIndicator(),
                 PopupMenuButton<String>(
                   tooltip: '更多',
@@ -1155,7 +1145,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final entry in [
-                            (_rankingsTab, Icons.leaderboard_rounded, '榜单'),
+                            (0, Icons.explore_rounded, '发现'),
                             (2, Icons.history_rounded, '历史'),
                             (1, Icons.bookmark_rounded, '追剧'),
                             if (widget.store.canDownload)
@@ -1179,15 +1169,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1),
                 ] else if (desktop) ...[
                   NavigationRail(
-                    selectedIndex: _navPosition < 0 ? null : _navPosition,
+                    selectedIndex: _navPosition,
                     onDestinationSelected: _navSelected,
                     labelType: NavigationRailLabelType.all,
                     groupAlignment: -.8,
                     destinations: [
                       NavigationRailDestination(
-                        icon: Icon(Icons.leaderboard_outlined),
-                        selectedIcon: Icon(Icons.leaderboard_rounded),
-                        label: Text('榜单'),
+                        icon: Icon(Icons.explore_outlined),
+                        selectedIcon: Icon(Icons.explore),
+                        label: Text('发现'),
                       ),
                       NavigationRailDestination(
                         icon: Icon(Icons.history_rounded),
@@ -1209,14 +1199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1, thickness: 1),
                 ],
                 Expanded(
-                  child: _tab == _rankingsTab
-                      ? RankingsScreen(
-                          repository: widget.repository,
-                          store: widget.store,
-                          initialGroup: _group.id,
-                          embedded: true,
-                        )
-                      : _tab == 0
+                  child: _tab == 0
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暂无可用站源',
@@ -1256,9 +1239,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   onDestinationSelected: _navSelected,
                   destinations: [
                     NavigationDestination(
-                      icon: Icon(Icons.leaderboard_outlined),
-                      selectedIcon: Icon(Icons.leaderboard_rounded),
-                      label: '榜单',
+                      icon: Icon(Icons.explore_outlined),
+                      selectedIcon: Icon(Icons.explore),
+                      label: '发现',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.history_rounded),

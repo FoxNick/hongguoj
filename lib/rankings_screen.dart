@@ -16,14 +16,10 @@ class RankingsScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     required this.initialGroup,
-    this.embedded = false,
   });
   final AppRepository repository;
   final LocalStore store;
   final String initialGroup;
-
-  /// 作为首页导航页嵌入时不再使用自带 AppBar，刷新入口移到榜单说明行。
-  final bool embedded;
 
   @override
   State<RankingsScreen> createState() => _RankingsScreenState();
@@ -169,7 +165,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _boards.map((board) => SourceSite.byId(board.source)).toSet(),
     );
     final boards = _boards
-        .where((board) => widget.embedded || board.groupId == _board?.groupId)
+        .where((board) => board.groupId == _board?.groupId)
         .toList();
     final items = _items
         .map(
@@ -188,9 +184,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         )
         .toList();
     return Scaffold(
-      appBar: widget.embedded
-          ? null
-          : AppBar(
+      appBar: AppBar(
         title: television && groups.length > 1
             ? RemoteButton(
                 key: const ValueKey('ranking-source-switch'),
@@ -269,27 +263,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
               ),
             if (_board != null)
               Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, widget.embedded ? 4 : 16, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        [
-                          _board!.description,
-                          if (_updated.isNotEmpty) _updated,
-                        ].join(' '),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    if (widget.embedded)
-                      IconButton(
-                        tooltip: '更新榜单',
-                        onPressed: _loading || _more
-                            ? null
-                            : () => _load(force: true),
-                        icon: const Icon(Icons.refresh_rounded, size: 20),
-                      ),
-                  ],
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    [
+                      _board!.description,
+                      if (_updated.isNotEmpty) _updated,
+                    ].join(' '),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ),
             if (_loading && items.isNotEmpty)

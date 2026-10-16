@@ -196,7 +196,11 @@ func nativeDownloadMetaDirectory(directory string) string {
 }
 
 func nativeDownloadMetaPath(target string) string {
-	return filepath.Join(nativeDownloadMetaDirectory(filepath.Dir(target)), filepath.Base(target)+".json")
+	directory := filepath.Dir(target)
+	if filepath.Base(directory) == nativeDownloadMetaDir {
+		return target + ".json"
+	}
+	return filepath.Join(nativeDownloadMetaDirectory(directory), filepath.Base(target)+".json")
 }
 
 func nativeDownloadMetaRead(target string) ([]byte, error) {

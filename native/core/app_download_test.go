@@ -444,10 +444,12 @@ func TestNativeDownloadHLSBundleIncludesSelectedAudioKeysAndByteRanges(t *testin
 				references = append(references, match[1])
 			}
 			for _, reference := range references {
-				if strings.Contains(reference, ":") || strings.Contains(reference, "/") {
+				if strings.Contains(reference, ":") ||
+					strings.Contains(reference, "/") &&
+						!strings.HasPrefix(reference, nativeDownloadMetaDir+"/") {
 					t.Fatalf("remote URI remained: %s", reference)
 				}
-				if _, err := os.Stat(filepath.Join(directory, reference)); err != nil {
+				if _, err := os.Stat(filepath.Join(directory, filepath.FromSlash(reference))); err != nil {
 					t.Fatalf("bundle resource missing: %s", reference)
 				}
 			}
@@ -457,7 +459,7 @@ func TestNativeDownloadHLSBundleIncludesSelectedAudioKeysAndByteRanges(t *testin
 		!strings.Contains(combined, "IV=0x00000000000000000000000000000001") {
 		t.Fatal("lost HLS timeline/encryption metadata")
 	}
-	keys, _ := filepath.Glob(filepath.Join(directory, "*.key"))
+	keys, _ := filepath.Glob(filepath.Join(directory, nativeDownloadMetaDir, "*.key"))
 	if len(keys) != 1 {
 		t.Fatalf("missing key: %v", keys)
 	}

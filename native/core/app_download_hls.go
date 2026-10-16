@@ -188,6 +188,9 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 				extension = ".key"
 			}
 			file := nativeDownloadAssetName(resolved, extension)
+			if key {
+				file = nativeDownloadMetaDir + "/" + file
+			}
 			if !assets[file] {
 				if len(assets) >= 20000 {
 					return "", errors.New("视频分片数量过多")

@@ -237,7 +237,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		return
 	}
 	parts := strings.Split(strings.Trim(request.URL.Path, "/"), "/")
-	if len(parts) != 2 && !(len(parts) == 3 && parts[1] == "cached") {
+	if len(parts) != 2 && !(len(parts) >= 3 && parts[1] == "cached") {
 		http.NotFound(writer, request)
 		return
 	}

@@ -187,33 +187,70 @@ func (cache *nativeEpisodeCache) verify(ctx context.Context, result nativeDownlo
 	files := map[string]int64{}
 	resources := map[string]nativeDownloadFileState{}
 	var total int64
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		name := entry.Name()
-		if entry.IsDir() || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".part") {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
+	collect := func(key string, info os.FileInfo) error {
+		if !info.Mode().IsRegular() || info.Size() <= 0 {
 			return errNativeLocalFile
 		}
-		if strings.HasSuffix(name, ".key") && info.Size() != 16 {
+		if strings.HasSuffix(key, ".key") && info.Size() != 16 {
 			return errors.New("缓冲的视频密钥不完整")
 		}
-		metadata, readErr := nativeDownloadMetaRead(filepath.Join(cache.directory, name))
+		metadata, readErr := nativeDownloadMetaRead(
+			filepath.Join(cache.directory, filepath.FromSlash(key)),
+		)
 		if readErr == nil {
 			var state nativeDownloadFileState
 			if json.Unmarshal(metadata, &state) != nil || !state.Complete || state.Total != info.Size() {
 				return errNativeLocalFile
 			}
-			resources[name] = state
-		} else if !os.IsNotExist(readErr) || name == result.file {
+			resources[key] = state
+		} else if !os.IsNotExist(readErr) ||
+			(key == result.file && !strings.HasSuffix(key, ".m3u8")) {
 			return errNativeLocalFile
 		}
-		files[name] = info.Size()
+		files[key] = info.Size()
 		total += info.Size()
+		return nil
+	}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		name := entry.Name()
+		if entry.IsDir() {
+			if name != nativeDownloadMetaDir {
+				continue
+			}
+			children, err := os.ReadDir(filepath.Join(cache.directory, name))
+			if err != nil {
+				return err
+			}
+			for _, child := range children {
+				childName := child.Name()
+				if strings.HasPrefix(childName, ".") ||
+					strings.HasSuffix(childName, ".json") ||
+					strings.HasSuffix(childName, ".part") {
+					continue
+				}
+				info, err := child.Info()
+				if err != nil {
+					return err
+				}
+				if err := collect(name+"/"+childName, info); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".part") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if err := collect(name, info); err != nil {
+			return err
+		}
 	}
 	decoder := &nativeStreamSession{}
 	if result.key != "" {
@@ -268,8 +305,8 @@ func (stream *nativeStreamServer) nativeServeEpisodeCache(writer http.ResponseWr
 		return false
 	}
 	name := entry
-	if len(parts) == 3 {
-		name = parts[2]
+	if len(parts) > 2 {
+		name = strings.Join(parts[2:], "/")
 	}
 	size, found := files[name]
 	if !found {

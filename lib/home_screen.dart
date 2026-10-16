@@ -718,15 +718,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedDramas.clear();
   });
 
-  /// 连点「最近观看」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
+  /// 连点「历史」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
   /// 仅多源包（真果鉴）生效；红果鉴单源包无密码功能。
-  /// 导航项顺序：热榜排在首位，其余沿用既有页签编号。
+  /// 导航项顺序：榜单排在首位，其余沿用既有页签编号。
   List<int> get _navOrder => [
     _rankingsTab,
-    0,
-    1,
     2,
+    1,
     if (widget.store.canDownload) 3,
+    0,
   ];
 
   int get _navPosition {
@@ -1150,12 +1150,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final entry in [
-                            (_rankingsTab, Icons.leaderboard_rounded, '热榜'),
-                            (0, Icons.explore_rounded, '发现'),
+                            (_rankingsTab, Icons.leaderboard_rounded, '榜单'),
+                            (2, Icons.history_rounded, '历史'),
                             (1, Icons.bookmark_rounded, '追剧'),
-                            (2, Icons.history_rounded, '最近观看'),
                             if (widget.store.canDownload)
                               (3, Icons.download_rounded, '下载'),
+                            (0, Icons.explore_rounded, '发现'),
                           ])
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
@@ -1183,21 +1183,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       NavigationRailDestination(
                         icon: Icon(Icons.leaderboard_outlined),
                         selectedIcon: Icon(Icons.leaderboard_rounded),
-                        label: Text('热榜'),
+                        label: Text('榜单'),
                       ),
                       NavigationRailDestination(
-                        icon: Icon(Icons.explore_outlined),
-                        selectedIcon: Icon(Icons.explore),
-                        label: Text('发现'),
+                        icon: Icon(Icons.history_rounded),
+                        label: Text('历史'),
                       ),
                       NavigationRailDestination(
                         icon: Icon(Icons.bookmark_border_rounded),
                         selectedIcon: Icon(Icons.bookmark_rounded),
                         label: Text('追剧'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.history_rounded),
-                        label: Text('最近观看'),
                       ),
                       if (widget.store.canDownload)
                         NavigationRailDestination(
@@ -1205,6 +1200,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           selectedIcon: Icon(Icons.download_rounded),
                           label: Text('下载'),
                         ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.explore_outlined),
+                        selectedIcon: Icon(Icons.explore),
+                        label: Text('发现'),
+                      ),
                     ],
                   ),
                   const VerticalDivider(width: 1, thickness: 1),
@@ -1259,21 +1259,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     NavigationDestination(
                       icon: Icon(Icons.leaderboard_outlined),
                       selectedIcon: Icon(Icons.leaderboard_rounded),
-                      label: '热榜',
+                      label: '榜单',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.explore_outlined),
-                      selectedIcon: Icon(Icons.explore),
-                      label: '发现',
+                      icon: Icon(Icons.history_rounded),
+                      label: '历史',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.bookmark_border_rounded),
                       selectedIcon: Icon(Icons.bookmark_rounded),
                       label: '追剧',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.history_rounded),
-                      label: '最近观看',
                     ),
                     if (widget.store.canDownload)
                       NavigationDestination(
@@ -1281,6 +1276,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         selectedIcon: Icon(Icons.download_rounded),
                         label: '下载',
                       ),
+                    NavigationDestination(
+                      icon: Icon(Icons.explore_outlined),
+                      selectedIcon: Icon(Icons.explore),
+                      label: '发现',
+                    ),
                   ],
                 ),
         );

@@ -1213,10 +1213,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           embedded: true,
                         )
                       : SavedLibrary(
-                          key: ValueKey('saved-tab-$_tab'),
+                          key: ValueKey('saved-tab-$_tab-${_allSources ? 'all' : _source.id}'),
                           repository: widget.repository,
                           store: widget.store,
                           history: _tab == 2,
+                          sourceFilter: _allSources ? null : _source.id,
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),

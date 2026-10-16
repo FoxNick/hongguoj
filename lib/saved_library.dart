@@ -19,6 +19,7 @@ class SavedLibrary extends StatefulWidget {
     required this.onOpen,
     required this.onContinue,
     this.onDownload,
+    this.sourceFilter,
   });
 
   final AppRepository repository;
@@ -27,6 +28,7 @@ class SavedLibrary extends StatefulWidget {
   final ValueChanged<Drama> onOpen;
   final ValueChanged<Drama> onContinue;
   final ValueChanged<Drama>? onDownload;
+  final String? sourceFilter;
 
   @override
   State<SavedLibrary> createState() => _SavedLibraryState();
@@ -111,6 +113,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
           ? history.map((entry) => entry.drama).toList()
           : widget.store.favorites;
       final items = all.where((drama) {
+        if (widget.sourceFilter != null && drama.source != widget.sourceFilter) {
+          return false;
+        }
         if (!matchesDramaQuery(drama, _search.text)) return false;
         final state = widget.store.following(drama.id);
         return widget.history ||
@@ -136,7 +141,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
             children: [
               Expanded(
                 child: Text(
-                  '${widget.history ? '历史' : '我的追剧'} · ${all.length}',
+                  '${widget.history ? '历史' : '我的追剧'} · ${all.length}${widget.sourceFilter != null ? ' · ${SourceSite.byId(widget.sourceFilter!).name}' : ''}',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),

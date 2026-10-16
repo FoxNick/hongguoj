@@ -141,6 +141,12 @@ class LocalStore extends ChangeNotifier {
     unlocked: _gateOff || _sourcesUnlocked,
   ).where((site) => allowsSource(site.id)).toList();
 
+  /// 站源管理页展示用：可用站源在前，已停用站源排在最后且不可操作。
+  List<SourceSite> get listedSources => [
+    ...sources,
+    ...SourceSite.retiredSources,
+  ];
+
   /// 默认隐藏的站源是否已解锁。解锁状态只在本次运行内有效，重启后恢复隐藏。
   bool get sourcesUnlocked => _gateOff || _sourcesUnlocked;
 
@@ -154,7 +160,7 @@ class LocalStore extends ChangeNotifier {
 
   void _loadSourceGate() {
     final enabled = _bool('sourceGateEnabled') ?? false;
-    final off = _bool('sourceGateOff') ?? false;
+    final off = _bool('sourceGateOff') ?? true;
     final salt = _string('sourceGateSalt') ?? '';
     final hash = _string('sourceGateHash') ?? '';
     final valid =

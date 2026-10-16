@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'local_store.dart';
 import 'models.dart';
@@ -75,6 +76,25 @@ class _SourceGateDialogState extends State<SourceGateDialog> {
     await _run(widget.store.disableSourceGate);
   }
 
+  /// 电视遥控：输入框会吞掉上下键（单行文本里上下键不移动焦点），
+  /// 这里在弹窗层拦截，改为按方向移动焦点，保证能从输入框走到下方按钮。
+  KeyEventResult _arrowKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final direction = key == LogicalKeyboardKey.arrowDown
+        ? TraversalDirection.down
+        : key == LogicalKeyboardKey.arrowUp
+        ? TraversalDirection.up
+        : null;
+    if (direction == null) return KeyEventResult.ignored;
+    final context = node.context;
+    if (context == null) return KeyEventResult.ignored;
+    FocusScope.of(context).focusInDirection(direction);
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -84,7 +104,7 @@ class _SourceGateDialogState extends State<SourceGateDialog> {
         final enabled = store.sourceGateEnabled;
         final gateOff = store.sourceGateOff;
         final admin = store.profile.admin;
-        return AlertDialog(
+        final dialog = AlertDialog(
           title: const Text('站源密码锁'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -203,6 +223,12 @@ class _SourceGateDialogState extends State<SourceGateDialog> {
                 child: Text(_busy ? '正在保存…' : '启用密码锁'),
               ),
           ],
+        );
+        return Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _arrowKey,
+          child: dialog,
         );
       },
     );

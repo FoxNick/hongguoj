@@ -162,7 +162,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (context, _) {
-      final sources = widget.store.sources.toList()
+      final sources = widget.store.listedSources.toList()
         ..sort((a, b) {
           final aFirst = a.id == widget.initialSource ? 0 : 1;
           final bFirst = b.id == widget.initialSource ? 0 : 1;
@@ -232,7 +232,10 @@ class _SourcesScreenState extends State<SourcesScreen> {
     final busy = pending || status?.running == true;
     final seconds = status?.retrySeconds ?? 0;
     final enabled =
-        !busy && seconds == 0 && widget.repository.supportsSourceManagement;
+        !source.retired &&
+        !busy &&
+        seconds == 0 &&
+        widget.repository.supportsSourceManagement;
     final error = _errors[source.id] ?? status?.error ?? '';
     final health = status?.health;
     final healthExpanded = _expandedHealth.contains(source.id);
@@ -260,6 +263,14 @@ class _SourcesScreenState extends State<SourcesScreen> {
             ),
             const SizedBox(height: 8),
             Text('最近更新：${sourceTimestamp(status?.updatedAt)}'),
+            if (source.retired)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '该站源已停用，暂不可选择或访问。',
+                  style: TextStyle(color: colors.error),
+                ),
+              ),
             if (status != null && status.count > 0)
               Text(
                 '已加载至第 ${status.page} 页${status.hasMore ? ' · 可继续加载' : ' · 当前分页已加载完'}',

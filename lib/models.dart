@@ -3,10 +3,18 @@ import 'dart:convert';
 import 'app_build.dart';
 
 class SourceSite {
-  const SourceSite(this.id, this.name, this.description);
+  const SourceSite(
+    this.id,
+    this.name,
+    this.description, {
+    this.retired = false,
+  });
   final String id;
   final String name;
   final String description;
+
+  /// 已停用：仍列在站源管理中说明原因，但不可选择、不可访问。
+  final bool retired;
   bool get onlineSearch => id == 'hongguo' || pagedSearch;
   bool get pagedSearch =>
       id == 'huangju' ||
@@ -40,6 +48,12 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '红果', '短剧 · 漫剧 · AI 剧');
   static const dsd = SourceSite('dsd', '帝果', '分类视频 · 在线搜索');
+  static const yeguo = SourceSite(
+    'yeguo',
+    '野果',
+    '分类短剧 · 在线搜索',
+    retired: true,
+  );
   static const sorani = SourceSite('sorani', '青空', '番剧 · 剧场动画 · 特摄');
   static const guipian = SourceSite('guipian', '鬼片', '鬼片 · 电视剧 · 动漫');
   static const hanxiaoquan = SourceSite(
@@ -55,7 +69,6 @@ class SourceSite {
   static const restrictedValues = [
     SourceSite('huangdou', '黄豆', '精选短剧'),
     SourceSite('huangju', '剧果', '热门 · 最新 · 分类短剧'),
-    SourceSite('yeguo', '野果', '分类短剧 · 在线搜索'),
     dsd,
     SourceSite('huangguo-video', '黄果视频', '视频剧集'),
     SourceSite('huangguoai', '黄果 AI', 'AI 短剧'),
@@ -76,11 +89,13 @@ class SourceSite {
     SourceSite('wangguo', '网果', '短剧网站 · 网页目录'),
     SourceSite('faguo', '发果', '168 短剧 · 网页目录'),
     SourceSite('wuguo', '伍果', '五五短剧 · 网页目录'),
+    yeguo,
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
   static const values = allSourcesEnabled ? knownValues : [hongguo];
-  static bool isAvailable(String id) => values.any((site) => site.id == id);
+  static bool isAvailable(String id) =>
+      values.any((site) => site.id == id && !site.retired);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
   static bool isPrimary(String id) =>
       primaryValues.any((site) => site.id == id);
@@ -91,6 +106,11 @@ class SourceSite {
   static List<SourceSite> visibleValues({required bool unlocked}) => [
     for (final site in values)
       if (unlocked || isPrimary(site.id)) site,
+  ];
+  /// 已停用站源：仅供站源管理页展示，排在可用站源之后。
+  static List<SourceSite> get retiredSources => [
+    for (final site in allValues)
+      if (site.retired) site,
   ];
   static SourceSite byId(String id) =>
       allValues.firstWhere((site) => site.id == id, orElse: () => hongguo);

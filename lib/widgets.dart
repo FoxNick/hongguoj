@@ -324,20 +324,12 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       if (snapshot.hasError || !snapshot.hasData) {
         return _failed(null);
       }
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final ratio = MediaQuery.devicePixelRatioOf(context);
-          final width = constraints.maxWidth.isFinite && constraints.maxWidth > 0
-              ? (constraints.maxWidth * ratio).round().clamp(120, 720)
-              : 440;
-          return Image.file(
-            File(snapshot.data!),
-            fit: BoxFit.cover,
-            cacheWidth: width,
-            excludeFromSemantics: true,
-            errorBuilder: (_, error, stack) => _failed(snapshot.data),
-          );
-        },
+      return Image.file(
+        File(snapshot.data!),
+        fit: BoxFit.cover,
+        cacheWidth: 440,
+        excludeFromSemantics: true,
+        errorBuilder: (_, error, stack) => _failed(snapshot.data),
       );
     },
   );

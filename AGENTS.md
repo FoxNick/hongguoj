@@ -1,5 +1,30 @@
 # 真果鉴开发约定
 
+## 本地禁止做的事（最高优先级，每次回复前自检）
+
+**本地不编译、不测试，验证全部交给 CI。** 明确禁止在本地执行：
+
+- `flutter test`（任何形式，包括只跑单个文件、`--plain-name` 过滤）
+- `flutter build` / `flutter run` / `flutter assemble` 等任何构建与运行命令
+- `go build` / `go test` / `go vet`（原生核心的编译与测试）
+- 任何脚本形式的构建入口：`scripts/build_android.py`、`scripts/build_windows.py`、`scripts/package_release.py`、`scripts/build_windows_installer.py`、`scripts/build_native.py`
+
+本地**允许且要求**执行：
+
+- `flutter analyze`（静态检查，不是测试）
+- `python scripts/finish_task.py --message "..."`（每次开发/修复/文档改动后、最终回复之前必须执行）
+- 只读的代码阅读与搜索、`git status` / `git diff` / `git log` 等查看类命令
+
+需要验证时，把改动推上去让 CI 跑：main 推送跑 `verify`（含原生单元测试、Dart 门槛测试、「全量 Dart 测试（仅报告）」），打标签才构建与发布。「全量 Dart 测试（仅报告）」的日志是修复既存失败用例的唯一信息来源。
+
+## 发版流程（严格按顺序）
+
+1. 改完 → `finish_task.py` → 总结变更 → **询问用户是否可以发版**，不得自行决定
+2. 用户明确说「发版」或「发新版」后才打标签：`git tag app-v<版本>-<构建号>` 并推送
+3. **发版**（不递增版本号）= 删除当前 Release/标签后重发同一版本号；**发新版** = 递增版本号，遵循「逢九进一」（`0.3.9 → 0.3.10 → 0.3.11 … → 0.3.19 → 0.4.0`）
+4. 打标签后**必须监控 CI 到成功**；失败就直接修改再重打该版本号
+5. 未获批准前，`main` 上可以累积多批改动，版本号与 README 小节一并准备好，等批准再打标签
+
 ## 项目目标
 
 构建 Flutter 多端独立应用。站源请求、解析、在线播放及后续下载、合并均在设备端完成；成品不依赖旧短剧库程序、旧项目路径或远程自建服务。可以迁移已经验证的业务逻辑，并将依赖一并纳入本项目。

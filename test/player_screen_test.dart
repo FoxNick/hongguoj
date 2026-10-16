@@ -150,6 +150,10 @@ void main() {
       ),
     );
     await settleOperations(tester);
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const ValueKey('player-gesture-surface'))),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
   }
 
   Future<void> unmount(WidgetTester tester, ScriptedPlayer player) async {

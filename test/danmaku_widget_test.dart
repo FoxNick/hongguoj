@@ -209,6 +209,10 @@ void main() {
       ),
     );
     await settle(tester);
+    await tester.tapAt(
+      tester.getCenter(find.byKey(const ValueKey('player-gesture-surface'))),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
     return local;
   }
 

@@ -266,6 +266,10 @@ void main() {
         ),
       );
       await tick(tester);
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const ValueKey('player-gesture-surface'))),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
       expect(find.byKey(const ValueKey('player-download')), findsNothing);
       expect(find.byKey(const ValueKey('player-favorite')), findsNothing);
       expect(find.byKey(const ValueKey('player-volume')), findsNothing);

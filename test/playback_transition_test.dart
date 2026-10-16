@@ -158,6 +158,12 @@ void main() {
             hasLength(1),
           );
           if (origin == 'button') {
+            await tester.tapAt(
+              tester.getCenter(
+                find.byKey(const ValueKey('player-gesture-surface')),
+              ),
+            );
+            await tester.pump(const Duration(milliseconds: 350));
             await tester.tap(find.byKey(const ValueKey('player-mobile-next')));
           } else {
             controller.value = controller.value.copyWith(

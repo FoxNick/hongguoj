@@ -278,6 +278,10 @@ void main() {
         isFalse,
       );
       expect(find.byKey(const ValueKey('play-episode-1')), findsNothing);
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const ValueKey('player-gesture-surface'))),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
       await tester.tap(find.byKey(const ValueKey('player-portrait-episodes')));
       await tester.pumpAndSettle();
       expect(find.text('选集'), findsOneWidget);

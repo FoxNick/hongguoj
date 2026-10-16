@@ -86,6 +86,7 @@ void main() {
     await settle(tester);
     await tester.pump(const Duration(milliseconds: 350));
     await settle(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
     return store;
   }
 

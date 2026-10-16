@@ -136,7 +136,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _acceptErrors = false;
   bool _foreground = true;
   bool _playIntent = true;
-  bool _showControlsOnPlaybackReady = true;
+  bool _showControlsOnPlaybackReady = false;
   bool _televisionOverlayVisible = false;
   bool _pendingError = false;
   bool _pictureInPictureSupported = false;
@@ -996,7 +996,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       return;
     }
-    await _play(_index, position: position, recoveryAction: action);
+    await _play(
+      _index,
+      position: position,
+      recoveryAction: action,
+      showControlsOnReady: true,
+    );
   }
 
   void _cancelSeasonAdvance() {
@@ -1230,7 +1235,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     PlaybackRecoveryAction? recoveryAction,
     bool playWhenReady = true,
     PlaybackPlan? handoffPlan,
-    bool showControlsOnReady = true,
+    bool showControlsOnReady = false,
     bool automaticAdvance = false,
     bool gestureAdvance = false,
   }) async {
@@ -1597,6 +1602,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _index,
       position: position,
       playWhenReady: quality == null || _error != null || _player.state.playing,
+      showControlsOnReady: true,
     );
   }
 
@@ -2045,7 +2051,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       }),
     );
     if (Platform.isWindows) {
-      unawaited(windowManager.setFullScreen(false));
+      unawaited(windowManager.setFullScreen(false).catchError((Object _) {}));
     } else if (_mobile || _television && Platform.isAndroid) {
       unawaited(
         (_orientationController?.releasePlayback(this) ??

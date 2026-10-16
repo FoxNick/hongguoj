@@ -14,6 +14,9 @@ class _TrayIconListener with TrayListener {
   void onTrayIconMouseDown() => unawaited(showMainWindow());
 
   @override
+  void onTrayIconRightMouseDown() => unawaited(trayManager.popUpContextMenu());
+
+  @override
   void onTrayMenuItemClick(MenuItem menuItem) {
     if (menuItem.key == 'exit') {
       unawaited(exitApplication());

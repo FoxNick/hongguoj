@@ -14,6 +14,8 @@
 
 **去掉旧名副本**：0.3.1 起每个 Release 都额外附了三份同内容的 `HongguoTV-<版本>-<架构>.apk`，原计划只保留 0.3.1 一版，但 [package_release.py](scripts/package_release.py) 一直无条件生成，0.3.2 也跟着带上了。现在删除该逻辑，Release 只保留 `duanjuhui-*` 产物；[app_updates.dart](lib/app_updates.dart) 里「优先新名、兼容旧名」的匹配保留不变。
 
+**托盘右键菜单**：0.3.2+44 的托盘图标能出现、窗口也能隐藏进去，但右键没有任何菜单。tray_manager 在 Windows 上不会自动弹菜单，必须在 `onTrayIconRightMouseDown` 里显式调用 `trayManager.popUpContextMenu()`，0.3.2 只调了 `setContextMenu` 登记菜单、从未弹出。现在右键弹出「显示主界面 / 退出」，左键单击仍直接恢复窗口。
+
 **未验证**：`flutter analyze lib test` 无 error / 无 warning。这是运行时错误，静态检查抓不到；能在发布前拦住的只有 Dart 测试——0.3.1 新增的 `source_gate_test` 用例（启用密码锁后重启仍解锁）会调用 `enableSourceGate`，在这版之前必然失败。当前 CI 的 `verify` 只跑 `go test` 与 `flutter analyze`，没有跑 `flutter test`。
 
 ## 0.3.2 电视标签焦点跟随修复与桌面托盘（待验证）

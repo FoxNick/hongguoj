@@ -44,7 +44,7 @@ class StorageAccess {
       builder: (dialog) => AlertDialog(
         title: const Text('需要存储权限'),
         content: const Text(
-          '下载文件保存在系统「下载」目录下的「短句汇」文件夹，需要开启「所有文件访问」权限。'
+          '下载文件保存在系统「下载」目录下的「橙龙短剧」文件夹，需要开启「所有文件访问」权限。'
           '授权后返回应用即可继续下载。',
         ),
         actions: [

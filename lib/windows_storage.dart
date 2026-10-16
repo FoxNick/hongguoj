@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
-const windowsDownloadFolderName = '短句汇';
+const windowsDownloadFolderName = '橙龙短剧';
 
 const legacyAppDataFolders = ['真果鉴', '红果鉴'];
 

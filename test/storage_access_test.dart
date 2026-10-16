@@ -57,7 +57,7 @@ void main() {
     final pending = StorageAccess.ensure(context);
     await tester.pumpAndSettle();
     expect(find.text('需要存储权限'), findsOneWidget);
-    expect(find.textContaining('短句汇'), findsOneWidget);
+    expect(find.textContaining('橙龙短剧'), findsOneWidget);
     await tester.tap(find.text('去授权'));
     await tester.pumpAndSettle();
     expect(await pending, isFalse);

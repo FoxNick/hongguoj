@@ -8,7 +8,7 @@
 
 namespace {
 
-constexpr wchar_t kAppMutex[] = L"duanjuhui-app-mutex";
+constexpr wchar_t kAppMutex[] = L"cldj-app-mutex";
 
 void FocusRunningInstance() {
   HWND existing = ::FindWindowW(nullptr, APP_WINDOW_TITLE);

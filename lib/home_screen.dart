@@ -1330,6 +1330,7 @@ class _HomeScreenState extends State<HomeScreen> {
           category: _displayCategory,
           error: _categoriesError,
           onCategory: _changeCategory,
+          followFocus: true,
           onRetry: () => _loadCategories(force: true),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,

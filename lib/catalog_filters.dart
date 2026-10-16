@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ class CatalogFilters extends StatefulWidget {
     required this.onRetry,
     this.error,
     this.trailing,
+    this.followFocus = false,
   });
 
   final List<CatalogCategory> categories;
@@ -24,17 +26,41 @@ class CatalogFilters extends StatefulWidget {
   final VoidCallback onRetry;
   final Widget? trailing;
 
+  /// 电视遥控：焦点落到某个分类上即切换（带防抖），不必再按一次确定。
+  final bool followFocus;
+
   @override
   State<CatalogFilters> createState() => _CatalogFiltersState();
 }
 
 class _CatalogFiltersState extends State<CatalogFilters> {
   final _anchors = <String, GlobalKey>{};
+  Timer? _follow;
+
+  @override
+  void dispose() {
+    _follow?.cancel();
+    super.dispose();
+  }
+
+  void _focusCategory(String id) {
+    if (!widget.followFocus || id == widget.category) return;
+    _follow?.cancel();
+    _follow = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) widget.onCategory(id);
+    });
+  }
+
+  void _selectCategory(String id) {
+    _follow?.cancel();
+    widget.onCategory(id);
+  }
 
   @override
   void didUpdateWidget(covariant CatalogFilters oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.category != widget.category) {
+      _follow?.cancel();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final anchor = _anchors[widget.category]?.currentContext;
         if (mounted && anchor != null) {
@@ -73,14 +99,15 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                               key: ValueKey('category-${entry.id}'),
                               label: entry.name,
                               selected: entry.id == widget.category,
-                              onPressed: () => widget.onCategory(entry.id),
+                              onFocus: () => _focusCategory(entry.id),
+                              onPressed: () => _selectCategory(entry.id),
                             )
                           : ChoiceChip(
                               key: ValueKey('category-${entry.id}'),
                               label: Text(entry.name),
                               selected: entry.id == widget.category,
                               showCheckmark: false,
-                              onSelected: (_) => widget.onCategory(entry.id),
+                              onSelected: (_) => _selectCategory(entry.id),
                             ),
                     ),
                 ],

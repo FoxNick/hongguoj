@@ -190,6 +190,7 @@ class RemoteButton extends StatelessWidget {
     this.selected = false,
     this.autofocus = false,
     this.focusNode,
+    this.onFocus,
   });
   final String label;
   final VoidCallback? onPressed;
@@ -197,6 +198,7 @@ class RemoteButton extends StatelessWidget {
   final bool selected;
   final bool autofocus;
   final FocusNode? focusNode;
+  final VoidCallback? onFocus;
 
   @override
   Widget build(BuildContext context) => RemoteTarget(
@@ -204,6 +206,7 @@ class RemoteButton extends StatelessWidget {
     selected: selected,
     autofocus: autofocus,
     focusNode: focusNode,
+    onFocus: onFocus,
     label: label,
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

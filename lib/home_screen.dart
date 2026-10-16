@@ -58,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   static const _rankingsTab = 4;
-  int _tab = _rankingsTab;
+  int _tab = 0;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -422,8 +422,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _televisionBack() {
     if (_selectionMode) {
       _cancelSelection();
-    } else if (_tab != _rankingsTab) {
-      setState(() => _tab = _rankingsTab);
+    } else if (_tab != 0) {
+      setState(() => _tab = 0);
     } else if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
@@ -1168,7 +1168,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 label: entry.$3,
                                 icon: entry.$2,
                                 selected: _tab == entry.$1,
-                                autofocus: entry.$1 == _rankingsTab,
+                                autofocus: entry.$1 == 0,
                                 onPressed: () => _onNavSelected(entry.$1),
                               ),
                             ),
@@ -1282,7 +1282,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return PopScope(
           canPop:
               !_selectionMode &&
-              (!television || _tab == _rankingsTab && _search.text.isEmpty),
+              (!television || _tab == 0 && _search.text.isEmpty),
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },

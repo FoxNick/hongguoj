@@ -808,8 +808,12 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 | 触发 | 行为 |
 | --- | --- |
 | 推送到 `main`（或提交 PR 改动源码） | 只跑 `verify`：编译原生核心（`go build ./...`）、`go vet`、`flutter analyze`，以及仅报告不阻断的 `go test`。约 2–4 分钟，**不构建 APK、不发布** |
-| 推送 `app-v*` 标签 | `verify` 通过后 **Android 与 Windows 并行构建**；Android 先完成就先创建 GitHub Release，Windows 完成后再把安装包追加到同一个 Release |
+| 推送 `app-v*` 标签 | `verify` 通过后 **Android 与 Windows 并行构建**；**哪个平台先完成就先创建 GitHub Release**，另一个完成后再把自己的产物、校验和与说明追加进同一个 Release |
 | 手动 `workflow_dispatch` | 同上（未指定标签时按 `pubspec.yaml` 版本派生标签） |
+
+两个平台的发布任务合并为一个共用脚本 [publish_release.sh](scripts/publish_release.sh)：Release 不存在就创建（说明取本文件的对应版本小节），已存在则追加产物、合并 `SHA256SUMS.txt`（按文件名去重）并补上本平台说明。两者共用 `app-publish-<ref>` 并发组串行执行，因此不会出现两边同时创建；不需要等待另一个平台，先编译完就先发布。
+
+同名 Release 已存在时不再报错，而是直接追加。若要重发同一版本，按「发版」规则先删掉该 Release 再重新打标签。
 
 推送标签前需先在 `pubspec.yaml` 提升 `version`；`verify` 会校验标签版本与 `pubspec.yaml` 一致（标签 `app-v0.2.4-36` 对应 `version: 0.2.4+36`），不一致直接失败。
 

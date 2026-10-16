@@ -196,11 +196,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  release:
+  publish-android:
     needs: [android]
     if: success() && (startsWith(github.ref, 'refs/tags/app-v') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: app-publish-${{ github.ref }}
     permissions:
       contents: write
     steps:
@@ -208,66 +210,27 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: duanjuhui-android
-          path: artifacts/duanjuhui-android
-      - name: 生成发布文件清单
-        run: |
-          set -euo pipefail
-          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
-          mkdir -p release
-          for directory in artifacts/*/; do
-            for file in "$directory"*; do
-              [ -f "$file" ] || continue
-              name=$(basename "$file")
-              if [ "$name" = "SHA256SUMS.txt" ]; then
-                continue
-              fi
-              cp "$file" "release/$name"
-            done
-          done
-          cd release
-          mapfile -t files < <(find . -maxdepth 1 -type f -printf '%f\n' | sort)
-          sha256sum "${files[@]}" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-      - name: 发布 Release
+          path: assets
+      - name: 创建或追加 Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            tag="${GITHUB_REF_NAME}"
-          else
-            tag="app-v${version//+/-}"
-          fi
-          release=${version%%+*}
-          section=$(awk -v v="## ${release} " 'index($0, v) == 1 { found = 1; next } found && /^## / { exit } found { print }' README.md)
-          {
-            printf '%s\n\n' "版本 ${version}。本版为短句汇全站源 Android APK。"
-            if [[ -n "${section//[[:space:]]/}" ]]; then
-              printf '%s\n' "$section"
-            else
-              printf '%s\n' "- 全站源：包含全部已接入站源"
-            fi
-            printf '\n%s\n' "Android（固定正式证书签名；与既有版本是否可覆盖取决于签名一致性，未做真实手机 / TV 验收）："
-            printf '%s\n' "- *-arm64-v8a.apk：绝大多数手机选这个"
-            printf '%s\n' "- *-armeabi-v7a.apk：较老的 32 位手机"
-            printf '%s\n' "- *-x86_64.apk：模拟器"
-          } > notes.md
-          if [[ "$version" == *-* ]]; then
-            echo "开发快照不能作为最终正式版发布。" >&2
-            exit 1
-          fi
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "版本已存在；请递增版本后发布，禁止覆盖既有发布文件。" >&2
-            exit 1
-          fi
-          gh release create "$tag" release/* --target "${{ github.sha }}" --title "短句汇 ${version}" --notes-file notes.md
+          cat > platform-notes.md <<'NOTES'
+          Android（固定正式证书签名；与既有版本是否可覆盖取决于签名一致性，未做真实手机 / TV 验收）：
+          - *-arm64-v8a.apk：绝大多数手机选这个
+          - *-armeabi-v7a.apk：较老的 32 位手机
+          - *-x86_64.apk：模拟器
+          - HongguoTV-*.apk：旧名兼容副本，供老版本应用内更新识别
+          NOTES
+          bash scripts/publish_release.sh assets platform-notes.md
 
-  release-windows:
-    needs: [release, windows]
+  publish-windows:
+    needs: [windows]
     if: success() && (startsWith(github.ref, 'refs/tags/app-v') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: app-publish-${{ github.ref }}
     permissions:
       contents: write
     steps:
@@ -275,30 +238,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: duanjuhui-windows
-          path: release
-      - name: 追加 Windows 安装包
+          path: assets
+      - name: 创建或追加 Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            tag="${GITHUB_REF_NAME}"
-          else
-            tag="app-v${version//+/-}"
-          fi
-          mkdir -p checksums
-          gh release download "$tag" --pattern SHA256SUMS.txt --dir checksums
-          (cd release && sha256sum ./*.zip ./*.exe) >> checksums/SHA256SUMS.txt
-          cat checksums/SHA256SUMS.txt
-          gh release upload "$tag" release/*.zip release/*.exe checksums/SHA256SUMS.txt --clobber
-          body=$(gh release view "$tag" --json body -q .body)
-          if ! printf '%s' "$body" | grep -q 'windows-x64.zip'; then
-            {
-              printf '%s\n' "$body"
-              printf '\n%s\n' "Windows（未做真机验收）："
-              printf '%s\n' "- *-windows-x64.zip：免安装，解压后直接运行"
-              printf '%s\n' "- *-windows-x64.exe：安装程序，装到 Program Files 并建立快捷方式"
-            } > notes.md
-            gh release edit "$tag" --notes-file notes.md
-          fi
+          cat > platform-notes.md <<'NOTES'
+          Windows（未做真机验收）：
+          - *-windows-x64.zip：免安装，解压后直接运行
+          - *-windows-x64.exe：安装程序，装到 Program Files 并建立快捷方式
+          NOTES
+          bash scripts/publish_release.sh assets platform-notes.md

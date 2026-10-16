@@ -794,16 +794,19 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 | 触发 | 行为 |
 | --- | --- |
 | 推送到 `main`（或提交 PR 改动源码） | 只跑 `verify`：编译原生核心（`go build ./...`）、`go vet`、`flutter analyze`，以及仅报告不阻断的 `go test`。约 2–4 分钟，**不构建 APK、不发布** |
-| 推送 `app-v*` 标签 | `verify` 通过后构建 Android APK 并创建 GitHub Release |
+| 推送 `app-v*` 标签 | `verify` 通过后 **Android 与 Windows 并行构建**；Android 先完成就先创建 GitHub Release，Windows 完成后再把安装包追加到同一个 Release |
 | 手动 `workflow_dispatch` | 同上（未指定标签时按 `pubspec.yaml` 版本派生标签） |
 
 推送标签前需先在 `pubspec.yaml` 提升 `version`；`verify` 会校验标签版本与 `pubspec.yaml` 一致（标签 `app-v0.2.4-36` 对应 `version: 0.2.4+36`），不一致直接失败。
 
-| 产物 | 内容 |
-| --- | --- |
-| `zhenguojian-android` | 三种架构 APK 和 SHA256 |
+| 任务 | 依赖 | 产物 |
+| --- | --- | --- |
+| `android` | `verify` | `zhenguojian-android`：三种架构 APK 和 SHA256 |
+| `windows` | `verify`（与 `android` 并行） | `zhenguojian-windows`：Windows x64 压缩包 |
+| `release` | 仅 `android` | 用 Android 产物创建 Release |
+| `release-windows` | `release` 与 `windows` | 把 Windows 压缩包与更新后的 `SHA256SUMS.txt` 追加到该 Release，并补上 Windows 说明 |
 
-仅在标签或手动触发时创建 GitHub Release（tag `app-v{version}`）。同名 Release 已存在则会失败并提示递增版本，不会覆盖既有发布文件。
+Android 完成即发布，因此 Release 会先于 Windows 出现；Windows 的产物、校验和与说明由 `release-windows` 随后补齐。同名 Release 已存在则会失败并提示递增版本，不会覆盖既有发布文件。
 
 Android 正式发布使用同一签名并递增构建号，在仓库 Secrets 配置：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。未配置时生成 debug 签名预览包。
 

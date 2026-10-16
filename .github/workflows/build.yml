@@ -153,7 +153,7 @@ jobs:
           retention-days: 14
 
   release:
-    needs: [android, windows]
+    needs: [android]
     if: success() && (startsWith(github.ref, 'refs/tags/app-v') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -163,7 +163,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: zhenguojian-android
+          path: artifacts/zhenguojian-android
       - name: 生成发布文件清单
         run: |
           set -euo pipefail
@@ -207,10 +208,6 @@ jobs:
             printf '%s\n' "- *-arm64-v8a.apk：绝大多数手机选这个"
             printf '%s\n' "- *-armeabi-v7a.apk：较老的 32 位手机"
             printf '%s\n' "- *-x86_64.apk：模拟器"
-            if ls artifacts/zhenguojian-windows/*.zip >/dev/null 2>&1; then
-              printf '\n%s\n' "Windows（未做真机验收）："
-              printf '%s\n' "- *-windows-x64.zip：解压后直接运行"
-            fi
           } > notes.md
           if [[ "$version" == *-* ]]; then
             echo "开发快照不能作为最终正式版发布。" >&2
@@ -221,3 +218,42 @@ jobs:
             exit 1
           fi
           gh release create "$tag" release/* --target "${{ github.sha }}" --title "短句汇 ${version}" --notes-file notes.md
+
+  release-windows:
+    needs: [release, windows]
+    if: success() && (startsWith(github.ref, 'refs/tags/app-v') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: zhenguojian-windows
+          path: release
+      - name: 追加 Windows 安装包
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n1)
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="app-v${version//+/-}"
+          fi
+          mkdir -p checksums
+          gh release download "$tag" --pattern SHA256SUMS.txt --dir checksums
+          (cd release && sha256sum ./*.zip) >> checksums/SHA256SUMS.txt
+          cat checksums/SHA256SUMS.txt
+          gh release upload "$tag" release/*.zip checksums/SHA256SUMS.txt --clobber
+          body=$(gh release view "$tag" --json body -q .body)
+          if ! printf '%s' "$body" | grep -q 'windows-x64.zip'; then
+            {
+              printf '%s\n' "$body"
+              printf '\n%s\n' "Windows（未做真机验收）："
+              printf '%s\n' "- *-windows-x64.zip：解压后直接运行"
+            } > notes.md
+            gh release edit "$tag" --notes-file notes.md
+          fi

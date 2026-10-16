@@ -256,6 +256,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     CatalogCategory(board.id, board.name),
                 ],
                 category: _board!.id,
+                followFocus: true,
                 onCategory: (id) =>
                     _select(boards.firstWhere((board) => board.id == id)),
                 onRetry: () => _load(force: true),

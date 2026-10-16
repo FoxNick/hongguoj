@@ -124,6 +124,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
         CatalogFilters(
           categories: _genres,
           category: _genre,
+          followFocus: true,
           onCategory: _select,
           onRetry: () => _load(force: true),
           trailing: widget.embedded ? refresh : null,

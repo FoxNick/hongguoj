@@ -179,7 +179,7 @@ void main() {
       expect(find.text('倍速'), findsOneWidget);
       await press(tester, LogicalKeyboardKey.arrowRight);
       await press(tester, LogicalKeyboardKey.select);
-      expect(player.state.rate, 1.25);
+      expect(player.state.rate, 1.15);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
         'tv-player-settings',
@@ -194,7 +194,7 @@ void main() {
       await press(tester, LogicalKeyboardKey.select);
       expect(repository.requestedQualities.last, 720);
       expect(player.state.position, const Duration(seconds: 28));
-      expect(player.state.rate, 1.25);
+      expect(player.state.rate, 1.15);
       expect(player.state.playing, isFalse);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,

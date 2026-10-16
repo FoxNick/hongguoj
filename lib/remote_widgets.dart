@@ -228,15 +228,17 @@ class RemoteButton extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 17,
-              color: onPressed == null
-                  ? Theme.of(context).disabledColor
-                  : selected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurface,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 17,
+                color: onPressed == null
+                    ? Theme.of(context).disabledColor
+                    : selected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
             ),
           ),
         ],

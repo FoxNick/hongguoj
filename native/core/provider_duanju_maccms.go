@@ -285,16 +285,6 @@ func (d *Downloader) fetchMaccmsCatalogPage(ctx context.Context, source string, 
 		} else {
 			address = fmt.Sprintf("%s%s%d---.html", base, strings.SplitN(class, "---.html", 2)[0], page)
 		}
-	case sourcePiguo:
-		class := strings.TrimSpace(category)
-		if class == "" {
-			class = "67"
-		}
-		if page <= 1 {
-			address = fmt.Sprintf("%s/p/66/c/%s", base, url.PathEscape(class))
-		} else {
-			address = fmt.Sprintf("%s/p/66/c/%s?year=&page=%d", base, url.PathEscape(class), page)
-		}
 	default:
 		return nil, false, errors.New("该站源没有网页目录")
 	}
@@ -374,11 +364,6 @@ func maccmsDetailCandidates(source, base, sourceID string) []string {
 			fmt.Sprintf("%s/vod/%s.html", base, sourceID),
 			fmt.Sprintf("%s/index.php/vod/detail/id/%s.html", base, sourceID),
 			fmt.Sprintf("%s/detail/%s.html", base, sourceID),
-		}
-	case sourcePiguo:
-		return []string{
-			fmt.Sprintf("%s/movie/%s", base, sourceID),
-			fmt.Sprintf("%s/p/66/d/%s", base, sourceID),
 		}
 	case sourceHuaguo:
 		return []string{
@@ -526,8 +511,6 @@ func (d *Downloader) searchMaccms(ctx context.Context, source, query string) ([]
 		address = fmt.Sprintf("%s/index.php/vod/search/page/1/wd/%s.html", base, url.PathEscape(query))
 	case sourceWangguo:
 		address = fmt.Sprintf("%s/search/%s----------1---.html", base, url.PathEscape(query))
-	case sourcePiguo:
-		address = fmt.Sprintf("%s/q/%s?page=1", base, url.PathEscape(query))
 	default:
 		return nil, errors.New("该站源不支持在线搜索")
 	}

@@ -25,8 +25,6 @@ type requestBackoff struct {
 
 func nativeSourceAdvice(host string) string {
 	switch {
-	case host == "ptt.red" || strings.HasSuffix(host, ".ptt.red"):
-		return "该站源对直连网络有风控，可在设置中开启代理后重试"
 	case host == "dsd.com.se" || strings.HasSuffix(host, ".dsd.com.se"):
 		return "该站源启用了浏览器验证，开启代理也可能无法通过"
 	}

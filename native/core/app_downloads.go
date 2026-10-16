@@ -165,6 +165,9 @@ func (manager *nativeDownloads) load() error {
 }
 
 func nativeDownloadWrite(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".download-write-")
 	if err != nil {
 		return err

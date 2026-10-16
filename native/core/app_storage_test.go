@@ -131,3 +131,26 @@ func TestMigrationRejectsContainmentAndSymbolicLinks(t *testing.T) {
 		t.Fatal("removed linked directory")
 	}
 }
+
+func TestDownloadMetaWriteCreatesSidecarDirectory(t *testing.T) {
+	engine, _ := storageFixture(t)
+	manager := engine.downloads
+	directory := filepath.Join(manager.root, "huangguoai", "合成短剧")
+	target := filepath.Join(directory, "第01集.mp4")
+	if err := nativeDownloadWrite(nativeDownloadMetaPath(target), []byte("{}")); err != nil {
+		t.Fatalf("sidecar write failed: %v", err)
+	}
+	if _, err := os.Stat(nativeDownloadMetaPath(target)); err != nil {
+		t.Fatalf("sidecar missing: %v", err)
+	}
+	marker := filepath.Join(nativeDownloadMetaDirectory(directory), nativeDownloadMarkerName(nativeDownloadJob{Drama: nativeDrama{ID: "hongguo:70001"}, Index: 1}))
+	if err := os.MkdirAll(filepath.Dir(marker), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeDownloadWrite(marker, []byte("{}")); err != nil {
+		t.Fatalf("marker write failed: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("marker missing: %v", err)
+	}
+}

@@ -75,7 +75,7 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 	sum := sha256.Sum256([]byte(identity))
 	fingerprint := hex.EncodeToString(sum[:])
 	marker := filepath.Join(nativeDownloadMetaDirectory(directory), nativeDownloadMarkerName(job))
-	if err := os.MkdirAll(directory, 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(marker), 0700); err != nil {
 		return nativeDownloadResult{}, errors.New("无法创建下载文件，请检查存储空间")
 	}
 	names := []string{entry}

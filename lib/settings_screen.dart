@@ -451,7 +451,7 @@ class _StorageScreenState extends State<StorageScreen>
                     children: [
                       const Expanded(
                         child: Text(
-                          '下载文件保存在系统「下载」目录下的「橙龙短剧」文件夹，需要开启「所有文件访问」权限。',
+                          '下载文件保存在系统「下载」目录下的「短句汇」文件夹，需要开启「所有文件访问」权限。',
                         ),
                       ),
                       const SizedBox(width: 12),

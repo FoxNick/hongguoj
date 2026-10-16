@@ -1,8 +1,8 @@
 import base64
 from dataclasses import dataclass
 
-APP_NAME = '橙龙短剧'
-APP_SLUG = 'cldj'
+APP_NAME = '短句汇'
+APP_SLUG = 'duanjuhui'
 
 
 @dataclass(frozen=True)

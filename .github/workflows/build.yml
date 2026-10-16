@@ -79,7 +79,7 @@ jobs:
         run: bash scripts/run_dart_tests.sh
       - name: 全量 Dart 测试（仅报告）
         continue-on-error: true
-        run: flutter test
+        run: flutter test --reporter expanded
 
   android:
     needs: [verify]

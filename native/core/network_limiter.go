@@ -23,13 +23,27 @@ type requestBackoff struct {
 	reason string
 }
 
+func nativeSourceAdvice(host string) string {
+	switch {
+	case host == "ptt.red" || strings.HasSuffix(host, ".ptt.red"):
+		return "该站源对直连网络有风控，可在设置中开启代理后重试"
+	case host == "dsd.com.se" || strings.HasSuffix(host, ".dsd.com.se"):
+		return "该站源启用了浏览器验证，开启代理也可能无法通过"
+	}
+	return ""
+}
+
 func (backoff *requestBackoff) Error() string {
 	reason := ""
 	if backoff.reason != "" {
 		reason = "：" + backoff.reason
 	}
+	advice := nativeSourceAdvice(backoff.host)
+	if advice != "" {
+		advice = "。" + advice
+	}
 	seconds := max(1, int(time.Until(backoff.until).Seconds()+0.999))
-	return fmt.Sprintf("%s HTTP %d%s，请在 %d 秒后重试", backoff.host, backoff.status, reason, seconds)
+	return fmt.Sprintf("%s HTTP %d%s，请在 %d 秒后重试%s", backoff.host, backoff.status, reason, seconds, advice)
 }
 
 func catalogResponseBlockReason(response *http.Response, body []byte) string {

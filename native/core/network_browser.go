@@ -16,6 +16,8 @@ import (
 
 const huangguoBrowserProfile = "Chrome 150"
 
+var huangguoBrowserExtraHosts = []string{"www.dsd.com.se", "dsd.com.se"}
+
 type browserHTTPClient interface {
 	Do(*fhttp.Request) (*fhttp.Response, error)
 	CloseIdleConnections()
@@ -55,6 +57,9 @@ func browserTransportHosts(huangguoVideoHost string) map[string]bool {
 		if parsed, err := url.Parse(spec.Base); err == nil && parsed.Host != "" {
 			hosts[strings.ToLower(parsed.Host)] = true
 		}
+	}
+	for _, host := range huangguoBrowserExtraHosts {
+		hosts[host] = true
 	}
 	return hosts
 }

@@ -13,6 +13,7 @@ import 'local_store.dart';
 import 'profiles_screen.dart';
 import 'app_build.dart';
 import 'sources_screen.dart';
+import 'storage_access.dart';
 import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
@@ -316,22 +317,38 @@ class StorageScreen extends StatefulWidget {
   State<StorageScreen> createState() => _StorageScreenState();
 }
 
-class _StorageScreenState extends State<StorageScreen> {
+class _StorageScreenState extends State<StorageScreen>
+    with WidgetsBindingObserver {
   Map<String, dynamic>? _info;
   String? _error;
   bool _busy = false;
+  bool _permission = true;
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refresh();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
   Future<void> _refresh() async {
+    final permission = await widget.repository.prepareDownloadDirectory();
     try {
       final info = await widget.repository.storage();
       if (mounted) {
         setState(() {
           _info = info;
+          _permission = permission;
           _error = null;
         });
       }
@@ -429,6 +446,23 @@ class _StorageScreenState extends State<StorageScreen> {
                   '剩余 ${storageSize((_info!['free'] as num?)?.toInt() ?? -1)} · ${_info!['files'] ?? 0} 个文件',
                 ),
                 const SizedBox(height: 24),
+                if (!_permission) ...[
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '下载文件保存在系统「下载」目录下的「短句汇」文件夹，需要开启「所有文件访问」权限。',
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: () => StorageAccess.request(),
+                        child: const Text('去授权'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 const Text('当前下载目录'),
                 const SizedBox(height: 8),
                 SelectableText(_info!['directory'] as String? ?? ''),

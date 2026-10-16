@@ -14,6 +14,7 @@ import 'models.dart';
 import 'playback_preloader.dart';
 import 'player_screen.dart';
 import 'remote_widgets.dart';
+import 'storage_access.dart';
 import 'widgets.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
@@ -213,6 +214,7 @@ class _DetailScreenState extends State<DetailScreen> {
         _profileEpoch != widget.store.profileEpoch) {
       return;
     }
+    if (!await StorageAccess.ensure(context) || !mounted) return;
     try {
       final added = await widget.repository.enqueueDownloads(
         detail,

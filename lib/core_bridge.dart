@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
@@ -12,6 +13,7 @@ import 'models.dart';
 import 'danmaku_models.dart';
 import 'background_downloads.dart';
 import 'local_store.dart';
+import 'storage_access.dart';
 import 'app_build.dart';
 import 'source_status.dart';
 import 'ranking_models.dart';
@@ -130,6 +132,7 @@ abstract class AppRepository {
   Future<Map<String, dynamic>> storage() async => {};
   Future<String> downloadDirectory() async =>
       (await storage())['directory'] as String? ?? '';
+  Future<bool> prepareDownloadDirectory() async => true;
   Future<void> moveDownloads(String directory) async =>
       throw AppFailure('当前环境不支持迁移');
   Future<int> workLease(String id, String command) async => 0;
@@ -199,6 +202,7 @@ class NativeRepository extends AppRepository {
   static final _coverDecoder = CoverDecoder();
   NativeRepository({this.background = false});
   final bool background;
+  Directory? _support;
   LocalStore? access;
   final _readOwner = DateTime.now().microsecondsSinceEpoch.toString();
   int _readSequence = 0;
@@ -581,6 +585,7 @@ class NativeRepository extends AppRepository {
             'controlDownloadBatch',
             'storage',
             'downloadDirectory',
+            'setDownloadDirectory',
             'moveDownloads',
             'workLease',
           }.contains(action)) {
@@ -651,6 +656,7 @@ class NativeRepository extends AppRepository {
   @override
   Future<void> initialize() async {
     final directory = await getApplicationSupportDirectory();
+    _support = directory;
     final build = await _call({
       'action': 'initialize',
       'directory': directory.path,
@@ -658,12 +664,53 @@ class NativeRepository extends AppRepository {
     if (build['allSources'] != allSourcesEnabled) {
       throw AppFailure('应用与原生核心的站源版本不一致，请使用完整安装包重新安装');
     }
-    if (!background) await BackgroundDownloads.prepare();
+    if (!background) {
+      await prepareDownloadDirectory();
+      await BackgroundDownloads.prepare();
+    }
     if (!background) {
       SystemProxyMonitor.start((value) async {
         await _call({'action': 'updateSystemProxy', 'systemProxy': value});
       });
     }
+  }
+
+  @override
+  Future<bool> prepareDownloadDirectory() async {
+    try {
+      return await _prepareDownloadDirectory();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _prepareDownloadDirectory() async {
+    if (background || defaultTargetPlatform != TargetPlatform.android) {
+      return true;
+    }
+    if (!await StorageAccess.granted()) return false;
+    final support = _support;
+    if (support == null) return true;
+    if (File(path.join(support.path, 'download-location.json')).existsSync()) {
+      return true;
+    }
+    if (File(
+      path.join(support.path, 'downloads', 'index.json'),
+    ).existsSync()) {
+      return true;
+    }
+    final target = await StorageAccess.targetDirectory();
+    if (target.isEmpty) return false;
+    final current = (await _call({
+      'action': 'downloadDirectory',
+    }))['directory'];
+    if (current == target) return true;
+    try {
+      await _call({'action': 'setDownloadDirectory', 'directory': target});
+    } catch (error) {
+      throw AppFailure('无法启用系统下载目录：$error');
+    }
+    return true;
   }
 
   @override
@@ -786,6 +833,9 @@ class NativeRepository extends AppRepository {
     int quality = 0,
   }) async {
     _authorize(detail.drama.source, download: true);
+    if (!await _prepareDownloadDirectory()) {
+      throw AppFailure('下载需要「所有文件访问」权限，请到系统设置中授予后重试');
+    }
     final epoch = access?.profileEpoch;
     await BackgroundDownloads.ensureStarted();
     if (epoch != access?.profileEpoch) throw AppFailure('用户已切换，请重新操作');
@@ -807,6 +857,9 @@ class NativeRepository extends AppRepository {
     int quality = 0,
   }) async {
     _authorize(detail.drama.source, download: true);
+    if (!await _prepareDownloadDirectory()) {
+      throw AppFailure('下载需要「所有文件访问」权限，请到系统设置中授予后重试');
+    }
     final epoch = access?.profileEpoch;
     await BackgroundDownloads.ensureStarted();
     if (epoch != access?.profileEpoch) throw AppFailure('用户已切换，请重新操作');

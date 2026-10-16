@@ -33,6 +33,7 @@ import 'player_menu.dart';
 import 'television_controls.dart';
 import 'widgets.dart';
 import 'sources_screen.dart';
+import 'storage_access.dart';
 import 'lan_controller.dart';
 import 'lan_screen.dart';
 import 'video_enhancement.dart';
@@ -1725,30 +1726,35 @@ class _PlayerScreenState extends State<PlayerScreen>
         widget.mediaId != null) {
       return;
     }
-    final added = await widget.repository.enqueueDownloads(
-      _detail,
-      selection.episodes,
-      quality: selection.quality,
-    );
-    if (!mounted || _closed) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(added == 0 ? '所选集数已在下载列表中' : '已加入 $added 集，已有任务自动跳过'),
-        action: SnackBarAction(
-          label: '查看',
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => DownloadsScreen(
-                  repository: widget.repository,
-                  store: widget.store,
+    if (!await StorageAccess.ensure(context) || !mounted || _closed) return;
+    try {
+      final added = await widget.repository.enqueueDownloads(
+        _detail,
+        selection.episodes,
+        quality: selection.quality,
+      );
+      if (!mounted || _closed) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(added == 0 ? '所选集数已在下载列表中' : '已加入 $added 集，已有任务自动跳过'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DownloadsScreen(
+                    repository: widget.repository,
+                    store: widget.store,
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (mounted && !_closed) _notice(error.toString());
+    }
   }
 
   Future<void> _openPanel(PlayerMenuSection section) async {

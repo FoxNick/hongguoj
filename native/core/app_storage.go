@@ -111,6 +111,40 @@ func nativeCopyTree(ctx context.Context, source, target string) error {
 	})
 }
 
+func (engine *nativeEngine) setDownloadDirectory(directory string) (string, error) {
+	if !filepath.IsAbs(directory) {
+		return "", errors.New("请选择有效的保存目录")
+	}
+	manager := engine.downloads
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.loadErr != nil {
+		return "", errors.New("下载记录无法读取，请先恢复下载记录")
+	}
+	if manager.closed || manager.moving {
+		return "", errors.New("下载目录正在处理，请稍后重试")
+	}
+	work := engine.work["media"] || engine.work["mergeQueue"] || engine.work["mergeCleanup"]
+	if len(manager.jobs) > 0 || work {
+		return "", errors.New("已有本地任务，无法更改下载目录")
+	}
+	target := filepath.Clean(directory)
+	if target == manager.root {
+		return target, nil
+	}
+	if err := os.MkdirAll(target, 0700); err != nil {
+		return "", errors.New("无法创建下载目录，请检查存储权限")
+	}
+	data, _ := json.Marshal(map[string]string{"directory": target})
+	if err := nativeDownloadWrite(filepath.Join(engine.directory, "download-location.json"), data); err != nil {
+		return "", errors.New("保存下载目录失败")
+	}
+	manager.root = target
+	return target, nil
+}
+
 func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) error {
 	if !filepath.IsAbs(parent) {
 		return errors.New("请选择有效的保存目录")

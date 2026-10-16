@@ -433,6 +433,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 		root := engine.downloads.root
 		engine.downloads.mu.Unlock()
 		return map[string]string{"directory": root}, nil
+	case "setDownloadDirectory":
+		return engine.setDownloadDirectory(input.Directory)
 	case "storage":
 		return engine.storage()
 	case "moveDownloads":

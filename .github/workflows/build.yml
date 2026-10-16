@@ -166,9 +166,15 @@ jobs:
           else
             tag="app-v${version//+/-}"
           fi
+          release=${version%%+*}
+          section=$(awk -v v="## ${release} " 'index($0, v) == 1 { found = 1; next } found && /^## / { exit } found { print }' README.md)
           {
             printf '%s\n\n' "版本 ${version}。本版为真果鉴全站源 Android APK。"
-            printf '%s\n' "- 全站源：包含全部已接入站源"
+            if [[ -n "${section//[[:space:]]/}" ]]; then
+              printf '%s\n' "$section"
+            else
+              printf '%s\n' "- 全站源：包含全部已接入站源"
+            fi
             printf '\n%s\n' "Android（固定正式证书签名；与既有版本是否可覆盖取决于签名一致性，未做真实手机 / TV 验收）："
             printf '%s\n' "- *-arm64-v8a.apk：绝大多数手机选这个"
             printf '%s\n' "- *-armeabi-v7a.apk：较老的 32 位手机"

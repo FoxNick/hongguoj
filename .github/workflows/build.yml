@@ -77,6 +77,9 @@ jobs:
         run: flutter analyze --no-fatal-infos lib test
       - name: Dart 回归测试
         run: bash scripts/run_dart_tests.sh
+      - name: 全量 Dart 测试（仅报告）
+        continue-on-error: true
+        run: flutter test
 
   android:
     needs: [verify]

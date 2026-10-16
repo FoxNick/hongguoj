@@ -253,9 +253,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   child: items.isEmpty
                       ? empty
                       : RemoteGrid(
-                          key: ValueKey(
-                            'saved-tv-${widget.history}-$_filter-${_search.text}',
-                          ),
+                          key: ValueKey('saved-tv-$_filter-${_search.text}'),
                           itemKeys: items.map((item) => item.id).toList(),
                           columns: columns,
                           itemExtent:

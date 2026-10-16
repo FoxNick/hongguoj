@@ -27,27 +27,33 @@ typedef _DartRequest = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _NativeFree = Void Function(Pointer<Utf8>);
 typedef _DartFree = void Function(Pointer<Utf8>);
 
-String _nativeRequest(String body) {
-  final DynamicLibrary library;
+DynamicLibrary _openCoreLibrary() {
   if (Platform.isAndroid) {
-    library = DynamicLibrary.open('libduanju_core.so');
-  } else if (Platform.isWindows) {
-    library = DynamicLibrary.open(
+    return DynamicLibrary.open('libduanju_core.so');
+  }
+  if (Platform.isWindows) {
+    return DynamicLibrary.open(
       path.join(path.dirname(Platform.resolvedExecutable), 'duanju_core.dll'),
     );
-  } else if (Platform.isIOS) {
-    library = DynamicLibrary.process();
-  } else {
-    throw UnsupportedError('当前首版支持 Android 手机和 Windows 电脑');
   }
-  final request = library.lookupFunction<_NativeRequest, _DartRequest>(
-    'DuanjuRequest',
-  );
-  final free = library.lookupFunction<_NativeFree, _DartFree>('DuanjuFree');
+  if (Platform.isIOS) {
+    return DynamicLibrary.process();
+  }
+  throw UnsupportedError('当前首版支持 Android 手机和 Windows 电脑');
+}
+
+late final DynamicLibrary _coreLibrary = _openCoreLibrary();
+late final _DartRequest _coreRequest = _coreLibrary
+    .lookupFunction<_NativeRequest, _DartRequest>('DuanjuRequest');
+late final _DartFree _coreFree = _coreLibrary.lookupFunction<_NativeFree, _DartFree>(
+  'DuanjuFree',
+);
+
+String _nativeRequest(String body) {
   final input = body.toNativeUtf8();
   Pointer<Utf8> output = nullptr;
   try {
-    output = request(input);
+    output = _coreRequest(input);
     if (output == nullptr) {
       throw StateError('本地核心没有返回结果');
     }
@@ -55,8 +61,126 @@ String _nativeRequest(String body) {
   } finally {
     malloc.free(input);
     if (output != nullptr) {
-      free(output);
+      _coreFree(output);
     }
+  }
+}
+
+void _coreWorkerMain(List<Object?> ports) {
+  final ready = ports[0] as SendPort;
+  final replies = ports[1] as SendPort;
+  final inbox = ReceivePort();
+  ready.send(inbox.sendPort);
+  inbox.listen((message) {
+    if (message is! List || message.length != 2) return;
+    final id = message[0];
+    final body = message[1];
+    if (id is! int || body is! String) return;
+    try {
+      replies.send([id, _nativeRequest(body)]);
+    } catch (_) {
+      replies.send([id, null]);
+    }
+  });
+}
+
+class _CoreWorker {
+  _CoreWorker(this._commands, this._replies, this._isolate) {
+    _subscription = _replies.listen(_onReply);
+  }
+  final SendPort _commands;
+  final ReceivePort _replies;
+  final Isolate _isolate;
+  final _pending = <int, Completer<String>>{};
+  late final StreamSubscription<dynamic> _subscription;
+  int inFlight = 0;
+  int _next = 0;
+
+  Future<String> send(String body) {
+    final id = _next++;
+    final completer = Completer<String>();
+    _pending[id] = completer;
+    inFlight++;
+    _commands.send([id, body]);
+    return completer.future.whenComplete(() {
+      _pending.remove(id);
+      inFlight--;
+    });
+  }
+
+  void _onReply(dynamic message) {
+    if (message is! List || message.length != 2) return;
+    final id = message[0];
+    if (id is! int) return;
+    final completer = _pending[id];
+    if (completer == null || completer.isCompleted) return;
+    final payload = message[1];
+    if (payload is String) {
+      completer.complete(payload);
+    } else {
+      completer.completeError(StateError('本地核心调用失败'));
+    }
+  }
+
+  void dispose() {
+    for (final completer in _pending.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('本地核心已退出'));
+      }
+    }
+    _pending.clear();
+    unawaited(_subscription.cancel());
+    _replies.close();
+    _isolate.kill(priority: Isolate.immediate);
+  }
+}
+
+final _coreWorkers = <_CoreWorker>[];
+Future<void>? _corePoolStartup;
+
+Future<_CoreWorker?> _startCoreWorker() async {
+  final ready = ReceivePort();
+  final replies = ReceivePort();
+  try {
+    final isolate = await Isolate.spawn(
+      _coreWorkerMain,
+      [ready.sendPort, replies.sendPort],
+      debugName: 'duanju-core',
+    );
+    final commands = await ready.first.timeout(const Duration(seconds: 8));
+    if (commands is! SendPort) throw StateError('本地核心工作线程未就绪');
+    return _CoreWorker(commands, replies, isolate);
+  } catch (_) {
+    replies.close();
+    return null;
+  } finally {
+    ready.close();
+  }
+}
+
+Future<void> _startCorePool() async {
+  for (var index = 0; index < 3; index++) {
+    final worker = await _startCoreWorker();
+    if (worker == null) break;
+    _coreWorkers.add(worker);
+  }
+}
+
+Future<String> _dispatchRequest(String body) async {
+  _corePoolStartup ??= _startCorePool();
+  await _corePoolStartup;
+  if (_coreWorkers.isEmpty) {
+    return Isolate.run(() => _nativeRequest(body));
+  }
+  var worker = _coreWorkers.first;
+  for (final candidate in _coreWorkers) {
+    if (candidate.inFlight < worker.inFlight) worker = candidate;
+  }
+  try {
+    return await worker.send(body);
+  } catch (_) {
+    _coreWorkers.remove(worker);
+    return Isolate.run(() => _nativeRequest(body));
   }
 }
 
@@ -595,7 +719,7 @@ class NativeRepository extends AppRepository {
         input['force'] = true;
       }
       final body = jsonEncode(input);
-      final encoded = await Isolate.run(() => _nativeRequest(body)).timeout(
+      final encoded = await _dispatchRequest(body).timeout(
         Duration(
           seconds: action == 'moveDownloads'
               ? 620

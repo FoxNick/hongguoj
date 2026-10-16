@@ -66,7 +66,7 @@ class _CatalogFiltersState extends State<CatalogFilters> {
     if (!widget.followFocus || id == widget.category) return;
     if (previous == null || previous == id) return;
     _follow?.cancel();
-    _follow = Timer(const Duration(milliseconds: 250), () {
+    _follow = Timer(const Duration(milliseconds: 100), () {
       if (mounted) widget.onCategory(id);
     });
   }

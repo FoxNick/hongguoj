@@ -816,7 +816,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (tab == _tab) return;
     if (previous == null || previous == tab) return;
     _navFollowTimer?.cancel();
-    _navFollowTimer = Timer(const Duration(milliseconds: 200), () {
+    _navFollowTimer = Timer(const Duration(milliseconds: 100), () {
       if (mounted) _changeTab(tab);
     });
   }
@@ -1288,7 +1288,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           embedded: true,
                         )
                       : SavedLibrary(
-                          key: ValueKey('saved-tab-$_tab-${_allSources ? 'all' : _source.id}'),
+                          key: ValueKey('saved-${_allSources ? 'all' : _source.id}'),
                           repository: widget.repository,
                           store: widget.store,
                           history: _tab == 2,

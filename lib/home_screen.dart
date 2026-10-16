@@ -96,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
           .firstOrNull ??
       SourceGroup(_source.groupId, _source.groupName, [_source]);
   bool get _onlineSearch => _group.sources.any((source) => source.onlineSearch);
+  bool get _searching => _search.text.trim().isNotEmpty;
   bool get _searchSuggestions =>
       _group.sources.any((source) => source.searchSuggestions);
   String get _searchHint {
@@ -684,6 +685,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_onlineSearch && query.trim().isEmpty) {
       _debounce = Timer(const Duration(milliseconds: 300), () => _load());
     }
+  }
+
+  void _clearSearch() {
+    _search.clear();
+    _searchChanged('');
   }
 
   void _submitSearch(String query) {
@@ -1399,29 +1405,52 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        CatalogFilters(
-          key: ValueKey('filters-${_group.id}'),
-          categories: _displayCategories,
-          category: _displayCategory,
-          error: _categoriesError,
-          onCategory: _changeCategory,
-          followFocus: true,
-          onRetry: () => _loadCategories(force: true),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_supportsVipFilter)
-                IconButton(
-                  tooltip: widget.store.hideVip ? 'VIP：隐藏' : 'VIP：显示',
-                  onPressed: () => saveUserChange(
-                    context,
-                    () => widget.store.setHideVip(!widget.store.hideVip),
+        if (_searching)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+            child: Row(
+              children: [
+                const Icon(Icons.search_rounded, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '“${_search.text.trim()}” 的搜索结果',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
                   ),
-                  icon: VipIcon(hidden: widget.store.hideVip),
                 ),
-            ],
+                TextButton(
+                  onPressed: _clearSearch,
+                  child: const Text('清除搜索'),
+                ),
+              ],
+            ),
+          )
+        else
+          CatalogFilters(
+            key: ValueKey('filters-${_group.id}'),
+            categories: _displayCategories,
+            category: _displayCategory,
+            error: _categoriesError,
+            onCategory: _changeCategory,
+            followFocus: true,
+            onRetry: () => _loadCategories(force: true),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_supportsVipFilter)
+                  IconButton(
+                    tooltip: widget.store.hideVip ? 'VIP：隐藏' : 'VIP：显示',
+                    onPressed: () => saveUserChange(
+                      context,
+                      () => widget.store.setHideVip(!widget.store.hideVip),
+                    ),
+                    icon: VipIcon(hidden: widget.store.hideVip),
+                  ),
+              ],
+            ),
           ),
-        ),
         if (_showRecommendations)
           Expanded(
             child: GestureDetector(

@@ -431,26 +431,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  bool _canExitNow() {
+  void _requestExit() {
     final now = DateTime.now();
-    if (_lastBackPressTime == null ||
-        now.difference(_lastBackPressTime!).inSeconds >= 2) {
-      return false;
+    final previous = _lastBackPressTime;
+    if (previous != null && now.difference(previous).inSeconds < 2) {
+      _lastBackPressTime = null;
+      unawaited(SystemNavigator.pop());
+      return;
     }
-    return true;
+    _lastBackPressTime = now;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('再按一次退出'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
-  void _handleHomeBack() {
-    final now = DateTime.now();
-    if (_lastBackPressTime == null ||
-        now.difference(_lastBackPressTime!).inSeconds >= 2) {
-      _lastBackPressTime = now;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('再按一次退出'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+  void _handleSystemBack() {
+    if (_selectionMode) {
+      _cancelSelection();
+    } else if (_tab != 0 || _search.text.isNotEmpty) {
+      _televisionBack();
+    } else {
+      _requestExit();
     }
   }
 
@@ -1298,29 +1302,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
         );
-        if (!television && !_selectionMode) return scaffold;
         return PopScope(
-          canPop:
-              !_selectionMode &&
-              (!television || _tab == 0 && _search.text.isEmpty) &&
-              _canExitNow(),
+          canPop: false,
           onPopInvokedWithResult: (didPop, result) {
-            if (didPop) return;
-            if (!television && _tab == 0 && _search.text.isEmpty) {
-              _handleHomeBack();
-            } else {
-              _televisionBack();
-            }
+            if (!didPop) _handleSystemBack();
           },
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): () =>
-                  Navigator.of(context).maybePop(),
-              const SingleActivator(LogicalKeyboardKey.goBack): () =>
-                  Navigator.of(context).maybePop(),
-            },
-            child: scaffold,
-          ),
+          child: television
+              ? CallbackShortcuts(
+                  bindings: {
+                    const SingleActivator(LogicalKeyboardKey.escape): () =>
+                        Navigator.of(context).maybePop(),
+                    const SingleActivator(LogicalKeyboardKey.goBack): () =>
+                        Navigator.of(context).maybePop(),
+                  },
+                  child: scaffold,
+                )
+              : scaffold,
         );
       },
     ),

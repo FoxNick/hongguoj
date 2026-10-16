@@ -24,6 +24,7 @@ import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
 import 'windows_storage.dart';
+import 'tray_support.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +48,9 @@ Future<void> main(List<String> arguments) async {
     '[App] 应用启动，版本: ${device.version}, 平台: ${Platform.operatingSystem}',
   );
   runApp(AppBootstrap(device: device));
+  if (Platform.isWindows) {
+    unawaited(initializeTray());
+  }
 }
 
 class AppBootstrap extends StatefulWidget {

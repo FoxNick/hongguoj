@@ -48,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _recommendationCategory = 'app:recommendations';
   final _search = TextEditingController();
   final _scroll = ScrollController();
+  final _navFocus = FocusNode(debugLabel: 'tv-nav');
   Timer? _debounce;
   late SourceSite _source;
   bool _allSources = false;
@@ -79,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _initialRetries = 0;
   DateTime? _lastBackPressTime;
   Timer? _navFollowTimer;
+  int? _previousNavFocus;
 
   List<SourceGroup> get _sourceGroups {
     final groups = SourceGroup.fromSources(widget.store.sources);
@@ -462,6 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(_onCatalogScroll);
+    _navFocus.addListener(_navFocusChanged);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
     _sourceSignature = widget.store.sources.map((site) => site.id).join(',');
@@ -499,6 +502,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _search.dispose();
     _scroll.removeListener(_onCatalogScroll);
     _scroll.dispose();
+    _navFocus.removeListener(_navFocusChanged);
+    _navFocus.dispose();
     super.dispose();
   }
 
@@ -779,8 +784,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _changeTab(tab);
   }
 
+  void _navFocusChanged() {
+    if (_navFocus.hasFocus) return;
+    _previousNavFocus = null;
+    _navFollowTimer?.cancel();
+  }
+
   void _focusNav(int tab) {
+    final previous = _previousNavFocus;
+    _previousNavFocus = tab;
     if (tab == _tab) return;
+    if (previous == null || previous == tab) return;
     _navFollowTimer?.cancel();
     _navFollowTimer = Timer(const Duration(milliseconds: 200), () {
       if (mounted) _changeTab(tab);
@@ -1180,29 +1194,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 164,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(8, 24, 8, 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final entry in [
-                            (0, Icons.explore_rounded, '发现'),
-                            (2, Icons.history_rounded, '历史'),
-                            (1, Icons.bookmark_rounded, '追剧'),
-                            if (widget.store.canDownload)
-                              (3, Icons.download_rounded, '下载'),
-                          ])
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: RemoteButton(
-                                key: ValueKey('tv-nav-${entry.$1}'),
-                                label: entry.$3,
-                                icon: entry.$2,
-                                selected: _tab == entry.$1,
-                                autofocus: entry.$1 == 0,
-                                onFocus: () => _focusNav(entry.$1),
-                                onPressed: () => _onNavSelected(entry.$1),
+                      child: Focus(
+                        focusNode: _navFocus,
+                        canRequestFocus: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final entry in [
+                              (0, Icons.explore_rounded, '发现'),
+                              (2, Icons.history_rounded, '历史'),
+                              (1, Icons.bookmark_rounded, '追剧'),
+                              if (widget.store.canDownload)
+                                (3, Icons.download_rounded, '下载'),
+                            ])
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: RemoteButton(
+                                  key: ValueKey('tv-nav-${entry.$1}'),
+                                  label: entry.$3,
+                                  icon: entry.$2,
+                                  selected: _tab == entry.$1,
+                                  autofocus: entry.$1 == 0,
+                                  onFocus: () => _focusNav(entry.$1),
+                                  onPressed: () => _onNavSelected(entry.$1),
+                                ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

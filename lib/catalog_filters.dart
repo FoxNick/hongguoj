@@ -26,7 +26,8 @@ class CatalogFilters extends StatefulWidget {
   final VoidCallback onRetry;
   final Widget? trailing;
 
-  /// 电视遥控：焦点落到某个分类上即切换（带防抖），不必再按一次确定。
+  /// 电视遥控：在同一排分类之间横向移动时跟随切换（带防抖），不必再按确定。
+  /// 焦点从别处（例如搜索框按方向键）扫过某个分类时不跟随。
   final bool followFocus;
 
   @override
@@ -35,16 +36,35 @@ class CatalogFilters extends StatefulWidget {
 
 class _CatalogFiltersState extends State<CatalogFilters> {
   final _anchors = <String, GlobalKey>{};
+  final _rowFocus = FocusNode(debugLabel: 'catalog-categories');
   Timer? _follow;
+  String? _previousFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _rowFocus.addListener(_rowFocusChanged);
+  }
+
+  void _rowFocusChanged() {
+    if (_rowFocus.hasFocus) return;
+    _previousFocus = null;
+    _follow?.cancel();
+  }
 
   @override
   void dispose() {
     _follow?.cancel();
+    _rowFocus.removeListener(_rowFocusChanged);
+    _rowFocus.dispose();
     super.dispose();
   }
 
   void _focusCategory(String id) {
+    final previous = _previousFocus;
+    _previousFocus = id;
     if (!widget.followFocus || id == widget.category) return;
+    if (previous == null || previous == id) return;
     _follow?.cancel();
     _follow = Timer(const Duration(milliseconds: 250), () {
       if (mounted) widget.onCategory(id);
@@ -84,33 +104,37 @@ class _CatalogFiltersState extends State<CatalogFilters> {
       child: Row(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              key: const ValueKey('catalog-categories'),
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  for (final entry in widget.categories)
-                    Padding(
-                      key: _anchors.putIfAbsent(entry.id, GlobalKey.new),
-                      padding: const EdgeInsets.only(right: 6),
-                      child: television
-                          ? RemoteButton(
-                              key: ValueKey('category-${entry.id}'),
-                              label: entry.name,
-                              selected: entry.id == widget.category,
-                              onFocus: () => _focusCategory(entry.id),
-                              onPressed: () => _selectCategory(entry.id),
-                            )
-                          : ChoiceChip(
-                              key: ValueKey('category-${entry.id}'),
-                              label: Text(entry.name),
-                              selected: entry.id == widget.category,
-                              showCheckmark: false,
-                              onSelected: (_) => _selectCategory(entry.id),
-                            ),
-                    ),
-                ],
+            child: Focus(
+              focusNode: _rowFocus,
+              canRequestFocus: false,
+              child: SingleChildScrollView(
+                key: const ValueKey('catalog-categories'),
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    for (final entry in widget.categories)
+                      Padding(
+                        key: _anchors.putIfAbsent(entry.id, GlobalKey.new),
+                        padding: const EdgeInsets.only(right: 6),
+                        child: television
+                            ? RemoteButton(
+                                key: ValueKey('category-${entry.id}'),
+                                label: entry.name,
+                                selected: entry.id == widget.category,
+                                onFocus: () => _focusCategory(entry.id),
+                                onPressed: () => _selectCategory(entry.id),
+                              )
+                            : ChoiceChip(
+                                key: ValueKey('category-${entry.id}'),
+                                label: Text(entry.name),
+                                selected: entry.id == widget.category,
+                                showCheckmark: false,
+                                onSelected: (_) => _selectCategory(entry.id),
+                              ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

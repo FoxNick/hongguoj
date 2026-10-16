@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'widgets.dart';
+
 /// 应用内「日记」日志服务 — 实时记录播放与系统事件，方便在电视与手机端快速排查问题。
 class DiaryService {
   static final List<String> _entries = <String>[];
@@ -38,12 +40,7 @@ class DiaryService {
     final text = fullText;
     await Clipboard.setData(ClipboardData(text: text));
     if (context.mounted) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('已复制播放日记到剪贴板'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      showNotice(context, '已复制播放日记到剪贴板');
     }
   }
 

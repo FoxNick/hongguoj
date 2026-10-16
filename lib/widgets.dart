@@ -8,6 +8,24 @@ import 'app_layout.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
 
+void showNotice(
+  BuildContext context,
+  String message, {
+  SnackBarAction? action,
+  Duration duration = const Duration(seconds: 3),
+}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(message),
+      duration: duration,
+      action: action,
+    ),
+  );
+}
+
 Future<void> saveUserChange(
   BuildContext context,
   Future<void> Function() action,
@@ -16,9 +34,7 @@ Future<void> saveUserChange(
     await action();
   } catch (_) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('未能保存，请检查存储空间和权限后重试。')));
+      showNotice(context, '未能保存，请检查存储空间和权限后重试。');
     }
   }
 }

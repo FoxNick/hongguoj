@@ -802,9 +802,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     } catch (error) {
       if (mounted && !_closed) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showNotice(context, error.toString());
       }
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
@@ -1110,18 +1108,17 @@ class _PlayerScreenState extends State<PlayerScreen>
       final message = error is AppFailure ? error.message : '下一季加载失败，请检查网络后重试';
       final retryable =
           error is! AppFailure || !error.code.startsWith('next_season_');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          action: retryable
-              ? SnackBarAction(
-                  label: '重试',
-                  onPressed: () {
-                    if (current()) unawaited(_finishSeason(retry: true));
-                  },
-                )
-              : null,
-        ),
+      showNotice(
+        context,
+        message,
+        action: retryable
+            ? SnackBarAction(
+                label: '重试',
+                onPressed: () {
+                  if (current()) unawaited(_finishSeason(retry: true));
+                },
+              )
+            : null,
       );
     } finally {
       if (!_closed && sequence == _seasonSequence) {
@@ -1679,9 +1676,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _notice(String message) {
     if (!mounted || _closed) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showNotice(context, message);
   }
 
   Future<void> _setPreferences(PlaybackPreferences preferences) async {
@@ -1762,22 +1757,23 @@ class _PlayerScreenState extends State<PlayerScreen>
         quality: selection.quality,
       );
       if (!mounted || _closed) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(added == 0 ? '所选集数已在下载列表中' : '已加入 $added 集，已有任务自动跳过'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DownloadsScreen(
-                    repository: widget.repository,
-                    store: widget.store,
-                  ),
+      showNotice(
+        context,
+        added == 0 ? '所选集数已在下载列表中' : '已加入 $added 集，已有任务自动跳过',
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () {
+            final navigator = Navigator.of(context);
+            navigator.popUntil((route) => route.isFirst);
+            navigator.push(
+              MaterialPageRoute<void>(
+                builder: (_) => DownloadsScreen(
+                  repository: widget.repository,
+                  store: widget.store,
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       );
     } catch (error) {

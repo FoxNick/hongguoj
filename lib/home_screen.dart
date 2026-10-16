@@ -445,12 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     _lastBackPressTime = now;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('再按一次退出'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    showNotice(context, '再按一次退出');
   }
 
   static const _backChannel = MethodChannel('duanju/home-back');
@@ -844,9 +839,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (!_selectedDramas.containsKey(drama.id) &&
         _selectedDramas.length >= BatchDownloads.maxDramas) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('一次最多选择 50 部短剧，请分批下载')));
+      showNotice(context, '一次最多选择 50 部短剧，请分批下载');
       return;
     }
     setState(() {
@@ -1161,13 +1154,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   const ClipboardData(text: 'abai531'),
                                 ),
                               );
-                              final messenger = ScaffoldMessenger.of(context);
                               Navigator.of(context, rootNavigator: true).pop();
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text('微信号 abai531 已复制，可在微信中搜索添加'),
-                                ),
-                              );
+                              showNotice(context, '微信号 abai531 已复制，可在微信中搜索添加');
                             },
                             child: const Text(
                               'BUG 反馈 / 定制软件请联系微信：abai531',

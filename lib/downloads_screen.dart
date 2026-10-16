@@ -106,13 +106,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
   void _message(String message, {String? action, VoidCallback? onAction}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        action: action == null || onAction == null
-            ? null
-            : SnackBarAction(label: action, onPressed: onAction),
-      ),
+    showNotice(
+      context,
+      message,
+      action: action == null || onAction == null
+          ? null
+          : SnackBarAction(label: action, onPressed: onAction),
     );
   }
 

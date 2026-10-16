@@ -7,6 +7,7 @@ import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'source_status.dart';
+import 'widgets.dart';
 
 String sourceTimestamp(DateTime? value) {
   if (value == null) return '尚无记录';
@@ -152,9 +153,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
     if (status.storageError.isNotEmpty) text.writeln(status.storageError);
     await Clipboard.setData(ClipboardData(text: text.toString()));
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('诊断信息已复制')));
+      showNotice(context, '诊断信息已复制');
     }
   }
 

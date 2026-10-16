@@ -222,29 +222,28 @@ class _DetailScreenState extends State<DetailScreen> {
         quality: selection.quality,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(added == 0 ? '所选集数已在下载列表中' : '已加入 $added 集，已有任务自动跳过'),
-          action: SnackBarAction(
-            label: '查看',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DownloadsScreen(
-                    repository: widget.repository,
-                    store: widget.store,
-                  ),
+      showNotice(
+        context,
+        added == 0 ? '所选集数已在下载列表中' : '已加入 $added 集，已有任务自动跳过',
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () {
+            final navigator = Navigator.of(context);
+            navigator.popUntil((route) => route.isFirst);
+            navigator.push(
+              MaterialPageRoute<void>(
+                builder: (_) => DownloadsScreen(
+                  repository: widget.repository,
+                  store: widget.store,
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showNotice(context, error.toString());
       }
     }
   }

@@ -13,7 +13,7 @@ const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const updateMaximumBytes = 256 * 1024 * 1024;
-const updateAssetPrefix = 'duanjuhui';
+const updateAssetPrefix = 'cldj';
 const updateLegacyAssetPrefix = 'HongguoTV';
 
 /// `flutter build apk --split-per-abi` 会按 ABI 叠加 versionCode，
@@ -244,7 +244,7 @@ class GithubUpdateTransport implements UpdateTransport {
           .timeout(const Duration(seconds: 15));
       request.followRedirects = false;
       request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
-      request.headers.set(HttpHeaders.userAgentHeader, 'duanjuhui-Updater');
+      request.headers.set(HttpHeaders.userAgentHeader, 'cldj-Updater');
       request.headers.set(
         HttpHeaders.acceptHeader,
         metadata ? 'application/vnd.github+json' : 'application/octet-stream',

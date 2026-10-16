@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import os
 from pathlib import Path
 import plistlib
@@ -23,15 +23,15 @@ class AppBuildTests(unittest.TestCase):
         for encoded in ['', dart_defines('ALL_SOURCES=false'), dart_defines('OTHER=true')]:
             variant = BuildVariant.from_dart_defines(encoded)
             self.assertFalse(variant.all_sources)
-            self.assertEqual(variant.name, '短句汇')
-            self.assertEqual(variant.slug, 'duanjuhui')
+            self.assertEqual(variant.name, '橙龙短剧')
+            self.assertEqual(variant.slug, 'cldj')
 
     def test_full_edition_decodes_among_other_flutter_defines(self):
         variant = BuildVariant.from_dart_defines(dart_defines(
             'OTHER=中文', 'ALL_SOURCES=true', 'VALUE=a=b'))
         self.assertTrue(variant.all_sources)
-        self.assertEqual(variant.name, '短句汇')
-        self.assertEqual(variant.slug, 'duanjuhui')
+        self.assertEqual(variant.name, '橙龙短剧')
+        self.assertEqual(variant.slug, 'cldj')
 
     def test_ios_branding_can_switch_editions_without_replacing_bundle_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -41,8 +41,8 @@ class AppBuildTests(unittest.TestCase):
             for enabled in [True, False]:
                 configure(path, dart_defines('ALL_SOURCES=' + str(enabled).lower()))
                 actual = plistlib.loads(path.read_bytes())
-                self.assertEqual(actual['CFBundleDisplayName'], '短句汇')
-                self.assertEqual(actual['CFBundleName'], 'duanjuhui')
+                self.assertEqual(actual['CFBundleDisplayName'], '橙龙短剧')
+                self.assertEqual(actual['CFBundleName'], 'cldj')
                 for key, value in original.items():
                     self.assertEqual(actual[key], value)
 
@@ -60,7 +60,7 @@ class AppBuildTests(unittest.TestCase):
                     encoding='utf-8',
                 )
                 subprocess.run(['cmake', '-P', str(script)], check=True, capture_output=True)
-                self.assertEqual(result.read_text(encoding='utf-8'), '短句汇|duanjuhui.exe')
+                self.assertEqual(result.read_text(encoding='utf-8'), '橙龙短剧|cldj.exe')
 
     def test_android_and_windows_propagate_one_edition_to_core_flutter_and_package(self):
         root = Path(__file__).resolve().parent

@@ -68,4 +68,4 @@ section=$(awk -v v="## ${release} " 'index($0, v) == 1 { found = 1; next } found
 } > initial-notes.md
 cat initial-notes.md
 gh release create "$tag" upload/* checksums/SHA256SUMS.txt \
-  --target "$GITHUB_SHA" --title "短句汇 ${version}" --notes-file initial-notes.md
+  --target "$GITHUB_SHA" --title "橙龙短剧 ${version}" --notes-file initial-notes.md

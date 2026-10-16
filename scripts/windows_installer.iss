@@ -1,4 +1,4 @@
-#define AppName "短句汇"
+#define AppName "橙龙短剧"
 #define AppId "{{8F3D6C41-5B2A-4E77-9C18-2D4A6B7E9F03}"
 
 [Setup]
@@ -19,7 +19,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-AppMutex=duanjuhui-app-mutex
+AppMutex=cldj-app-mutex
 CloseApplications=force
 RestartApplications=no
 

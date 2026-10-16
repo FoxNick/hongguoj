@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 import java.util.Base64
 
 plugins {
@@ -39,7 +39,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = "短句汇"
+        manifestPlaceholders["appLabel"] = "橙龙短剧"
         manifestPlaceholders["appBanner"] = "@drawable/tv_banner_hongguo"
     }
 

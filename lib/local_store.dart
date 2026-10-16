@@ -147,7 +147,7 @@ class LocalStore extends ChangeNotifier {
     ...SourceSite.retiredSources,
   ];
 
-  /// 默认隐藏的站源是否已解锁。解锁状态只在本次运行内有效，重启后恢复隐藏。
+  /// 默认隐藏的站源是否已解锁。解锁状态会保存，重启后保持解锁。
   bool get sourcesUnlocked => _gateOff || _sourcesUnlocked;
 
   /// 是否已启用站源密码锁。
@@ -171,7 +171,7 @@ class LocalStore extends ChangeNotifier {
     _gateOff = !valid && off;
     _gateSalt = valid ? salt : '';
     _gateHash = valid ? hash : '';
-    _sourcesUnlocked = false;
+    _sourcesUnlocked = _bool('sourceGateUnlocked') ?? false;
   }
 
   Future<void> _checkSourcePin(String pin) async {
@@ -195,23 +195,25 @@ class LocalStore extends ChangeNotifier {
     _failures = 0;
   }
 
-  /// 校验密码并解锁默认隐藏的站源（仅本次运行有效）。
+  /// 校验密码并解锁默认隐藏的站源，解锁状态会保存。
   Future<void> unlockSources(String pin) => _queue(() async {
     if (_configurationError != null) throw StateError('本地用户配置损坏，请先恢复');
     if (!_gateEnabled) throw StateError('尚未启用站源密码锁');
     await _checkSourcePin(pin);
     if (!_sourcesUnlocked) {
       _sourcesUnlocked = true;
+      await _commit({'sourceGateUnlocked': true});
       _notify();
     }
   });
 
-  /// 重新隐藏默认隐藏的站源，无需重启。
-  void lockSources() {
+  /// 重新隐藏默认隐藏的站源。
+  Future<void> lockSources() => _queue(() async {
     if (!_gateEnabled || !_sourcesUnlocked) return;
     _sourcesUnlocked = false;
+    await _commit({'sourceGateUnlocked': false});
     _notify();
-  }
+  });
 
   /// 设置或更换密码锁，并立即解锁。
   Future<void> enableSourceGate(String pin) => _queue(() async {
@@ -227,6 +229,7 @@ class LocalStore extends ChangeNotifier {
       'sourceGateOff': false,
       'sourceGateSalt': salt,
       'sourceGateHash': hash,
+      'sourceGateUnlocked': true,
     });
     _gateEnabled = true;
     _gateOff = false;
@@ -244,6 +247,7 @@ class LocalStore extends ChangeNotifier {
       'sourceGateOff': true,
       'sourceGateSalt': '',
       'sourceGateHash': '',
+      'sourceGateUnlocked': false,
     });
     _gateEnabled = false;
     _gateOff = true;

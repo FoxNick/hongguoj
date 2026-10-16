@@ -44,7 +44,7 @@ void main() {
     expect(store.sourcesUnlocked, isTrue);
     expect(store.sources.length, allSourcesEnabled ? 11 : 1);
 
-    store.lockSources();
+    await store.lockSources();
     expect(store.sourcesUnlocked, isFalse);
     expect(store.sources.length, allSourcesEnabled ? 4 : 1);
     expect(store.allowsSource('huangdou'), isFalse);
@@ -58,10 +58,10 @@ void main() {
     expect(store.sources.length, allSourcesEnabled ? 11 : 1);
   });
 
-  test('a saved gate hides sources again after restart', () async {
+  test('a saved gate hides sources again after restart once relocked', () async {
     final store = await create();
     await store.enableSourceGate('666');
-    store.lockSources();
+    await store.lockSources();
     final restarted = testStore(store.preferences);
     addTearDown(restarted.dispose);
     expect(restarted.sourceGateEnabled, isTrue);
@@ -71,10 +71,28 @@ void main() {
     expect(restarted.sourcesUnlocked, isTrue);
   });
 
+  test('an unlocked gate stays unlocked after restart', () async {
+    final store = await create();
+    await store.enableSourceGate('666');
+    final restarted = testStore(store.preferences);
+    addTearDown(restarted.dispose);
+    expect(restarted.sourceGateEnabled, isTrue);
+    expect(restarted.sourcesUnlocked, isTrue);
+    expect(restarted.sources.length, allSourcesEnabled ? 11 : 1);
+
+    final relocked = testStore(store.preferences);
+    addTearDown(relocked.dispose);
+    await relocked.lockSources();
+    final third = testStore(relocked.preferences);
+    addTearDown(third.dispose);
+    expect(third.sourcesUnlocked, isFalse);
+    expect(third.sources.length, allSourcesEnabled ? 4 : 1);
+  });
+
   test('disabling the gate restores every compiled source', () async {
     final store = await create();
     await store.enableSourceGate('666');
-    store.lockSources();
+    await store.lockSources();
     await store.disableSourceGate();
     expect(store.sourceGateEnabled, isFalse);
     expect(store.sourcesUnlocked, isTrue);

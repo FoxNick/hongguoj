@@ -63,14 +63,7 @@ class _SourceGateDialogState extends State<SourceGateDialog> {
     await _run(() => widget.store.enableSourceGate(pin));
   }
 
-  Future<void> _lock() async {
-    setState(() {
-      _busy = false;
-      _error = null;
-    });
-    widget.store.lockSources();
-    if (mounted) Navigator.pop(context);
-  }
+  Future<void> _lock() => _run(widget.store.lockSources);
 
   Future<void> _disable() async {
     await _run(widget.store.disableSourceGate);

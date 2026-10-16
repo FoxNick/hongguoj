@@ -14,7 +14,7 @@
 
 **新增 Windows 安装程序**：除免安装 zip 外，另外产出 `duanjuhui-0.3.1-windows-x64.exe`（Inno Setup），默认装到 `Program Files\短句汇`，建立开始菜单快捷方式与卸载程序，桌面快捷方式可选；安装脚本见 [windows_installer.iss](scripts/windows_installer.iss)。
 
-**敏感站源默认隐藏**：[local_store.dart](lib/local_store.dart) 中 `sourceGateOff` 的默认值改回 `false`，未启用密码锁时只显示主站源，其余站源默认隐藏；在历史页连点六次打开密码锁面板，设置密码后当次运行即显示，重启后恢复隐藏。已启用密码锁的环境行为不变。
+**敏感站源默认隐藏，解锁后保持可见**：[local_store.dart](lib/local_store.dart) 中 `sourceGateOff` 的默认值改回 `false`，未启用密码锁时只显示主站源，其余站源默认隐藏；在历史页连点六次打开密码锁面板，设置密码或输入密码解锁后**解锁状态会保存**（新增 `sourceGateUnlocked`），重启后保持解锁，不再自动隐藏。只有主动点「重新锁定」，或改密码 / 关闭密码功能时才恢复隐藏。此前解锁只在本次运行内有效，每次启动都要重新解锁。
 
 **未验证**：`flutter analyze lib test` 无 error / 无 warning。桌面版的名字、图标、安装程序、数据目录迁移，以及安卓上敏感站源默认隐藏与旧名兼容更新，都需要在真机上确认；本轮未在本地构建产物，Kotlin、CMake 与资源只在打标签构建时编译。
 

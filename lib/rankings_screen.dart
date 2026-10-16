@@ -169,7 +169,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _boards.map((board) => SourceSite.byId(board.source)).toSet(),
     );
     final boards = _boards
-        .where((board) => board.groupId == _board?.groupId)
+        .where((board) => widget.embedded || board.groupId == _board?.groupId)
         .toList();
     final items = _items
         .map(

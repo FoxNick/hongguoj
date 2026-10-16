@@ -74,7 +74,7 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 	}
 	sum := sha256.Sum256([]byte(identity))
 	fingerprint := hex.EncodeToString(sum[:])
-	marker := filepath.Join(directory, nativeDownloadMarkerName(job))
+	marker := filepath.Join(nativeDownloadMetaDirectory(directory), nativeDownloadMarkerName(job))
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nativeDownloadResult{}, errors.New("无法创建下载文件，请检查存储空间")
 	}
@@ -189,9 +189,27 @@ func nativeDownloadRange(value string) (int64, int64, int64, bool) {
 	return start, end, total, start >= 0 && end >= start && total > end
 }
 
+const nativeDownloadMetaDir = ".meta"
+
+func nativeDownloadMetaDirectory(directory string) string {
+	return filepath.Join(directory, nativeDownloadMetaDir)
+}
+
+func nativeDownloadMetaPath(target string) string {
+	return filepath.Join(nativeDownloadMetaDirectory(filepath.Dir(target)), filepath.Base(target)+".json")
+}
+
+func nativeDownloadMetaRead(target string) ([]byte, error) {
+	data, err := os.ReadFile(nativeDownloadMetaPath(target))
+	if err == nil || !os.IsNotExist(err) {
+		return data, err
+	}
+	return os.ReadFile(target + ".json")
+}
+
 func (manager *nativeDownloads) downloadFile(ctx context.Context, address, referer, target string, key bool, progress func(int64, int64)) (int64, error) {
 	var metadata nativeDownloadFileState
-	if data, err := os.ReadFile(target + ".json"); err == nil {
+	if data, err := nativeDownloadMetaRead(target); err == nil {
 		_ = json.Unmarshal(data, &metadata)
 	}
 	if metadata.URL != address {
@@ -288,7 +306,11 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	}
 	metadata := nativeDownloadFileState{URL: address, Validator: validator, Total: total}
 	encoded, _ := json.Marshal(metadata)
-	if err := nativeDownloadWrite(target+".json", encoded); err != nil {
+	meta := nativeDownloadMetaPath(target)
+	if err := os.MkdirAll(filepath.Dir(meta), 0700); err != nil {
+		return 0, false, err
+	}
+	if err := nativeDownloadWrite(meta, encoded); err != nil {
 		return 0, false, err
 	}
 	flags := os.O_CREATE | os.O_WRONLY
@@ -353,7 +375,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	}
 	metadata.Complete, metadata.Total = true, received
 	encoded, _ = json.Marshal(metadata)
-	if err = nativeDownloadWrite(target+".json", encoded); err != nil {
+	if err = nativeDownloadWrite(nativeDownloadMetaPath(target), encoded); err != nil {
 		return received, false, err
 	}
 	if cache := nativeStartupCache(ctx); cache != nil {

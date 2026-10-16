@@ -202,7 +202,7 @@ func (cache *nativeEpisodeCache) verify(ctx context.Context, result nativeDownlo
 		if strings.HasSuffix(name, ".key") && info.Size() != 16 {
 			return errors.New("缓冲的视频密钥不完整")
 		}
-		metadata, readErr := os.ReadFile(filepath.Join(cache.directory, name) + ".json")
+		metadata, readErr := nativeDownloadMetaRead(filepath.Join(cache.directory, name))
 		if readErr == nil {
 			var state nativeDownloadFileState
 			if json.Unmarshal(metadata, &state) != nil || !state.Complete || state.Total != info.Size() {

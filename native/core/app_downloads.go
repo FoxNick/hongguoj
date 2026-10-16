@@ -615,6 +615,8 @@ func discardDownloadMediaDepth(directory, name string, depth int) {
 	for _, suffix := range []string{"", ".part", ".json"} {
 		_ = os.Remove(filepath.Join(directory, name+suffix))
 	}
+	_ = os.Remove(nativeDownloadMetaPath(filepath.Join(directory, name)))
+	_ = os.Remove(nativeDownloadMetaDirectory(directory))
 }
 
 func (manager *nativeDownloads) close() {

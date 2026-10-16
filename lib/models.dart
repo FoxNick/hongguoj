@@ -76,7 +76,7 @@ class SourceSite {
     ...duanjuValues,
   ];
 
-  /// 真果鉴扩展站源：自原项目迁回。
+  /// 扩展站源：自原项目迁回。
   static const duanjuValues = [
     SourceSite('yaguo', '芽果', '星芽短剧 · 登录接口'),
     SourceSite('maoguo', '猫果', '七猫短剧 · 签名接口'),

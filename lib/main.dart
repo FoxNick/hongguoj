@@ -23,6 +23,7 @@ import 'video_enhancement_assets.dart';
 import 'danmaku_emoji_assets.dart';
 import 'diary_service.dart';
 import 'app_updates.dart';
+import 'windows_storage.dart';
 
 Future<void> main(List<String> arguments) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,7 @@ Future<void> main(List<String> arguments) async {
   }
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
+    await prepareWindowsStorage();
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();

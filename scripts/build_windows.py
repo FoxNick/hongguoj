@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import os
 import platform
 import shutil
@@ -32,5 +32,7 @@ with china_mirror_environment(environment, options.cn_mirrors) as env, mirrored_
     subprocess.run([flutter, 'pub', 'get'], cwd=root, env=env, check=True)
     build_args = [flutter, 'build', 'windows', '--release', '--no-pub', *variant.flutter_arguments]
     subprocess.run(build_args, cwd=root, env=env, check=True)
+    subprocess.run([sys.executable, str(root / 'scripts' / 'build_windows_installer.py'), *variant.arguments],
+                   cwd=root, env=env, check=True)
     subprocess.run([sys.executable, str(root / 'scripts' / 'package_release.py'), '--platform', 'windows', *variant.arguments],
                    cwd=root, env=env, check=True)

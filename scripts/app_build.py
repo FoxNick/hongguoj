@@ -1,6 +1,10 @@
 import base64
 from dataclasses import dataclass
 
+APP_NAME = '短句汇'
+APP_SLUG = 'duanjuhui'
+LEGACY_APK_PREFIX = 'HongguoTV'
+
 
 @dataclass(frozen=True)
 class BuildVariant:
@@ -8,11 +12,15 @@ class BuildVariant:
 
     @property
     def name(self):
-        return '真果鉴' if self.all_sources else '红果鉴'
+        return APP_NAME
 
     @property
     def slug(self):
-        return 'zhenguojian' if self.all_sources else 'hongguojian'
+        return APP_SLUG
+
+    @property
+    def legacy_slug(self):
+        return LEGACY_APK_PREFIX
 
     @property
     def arguments(self):
@@ -40,4 +48,4 @@ class BuildVariant:
 
 def add_variant_argument(parser):
     parser.add_argument('--all-sources', action='store_true',
-                        help='构建包含全部站源的真果鉴；默认构建仅红果的红果鉴')
+                        help='构建包含全部已接入站源的完整版；默认构建精简版')

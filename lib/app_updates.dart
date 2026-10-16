@@ -13,6 +13,8 @@ const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const updateMaximumBytes = 256 * 1024 * 1024;
+const updateAssetPrefix = 'duanjuhui';
+const updateLegacyAssetPrefix = 'HongguoTV';
 
 /// `flutter build apk --split-per-abi` 会按 ABI 叠加 versionCode，
 /// 因此已安装版本与 Release 构建号都必须加上对应偏移再比较。
@@ -118,15 +120,26 @@ class AppRelease {
     final code = offset + build;
     if (code <= installed.code) return null;
     final version = match[1]!;
-    final name = 'HongguoTV-$version-${installed.abi}.apk';
     final assets = json['assets'];
     if (assets is! List) throw const FormatException('缺少安装包列表');
-    final matches = assets
-        .whereType<Map>()
-        .where((a) => a['name'] == name)
-        .toList();
-    if (matches.length != 1) throw const FormatException('未找到适合当前架构的唯一安装包');
-    final asset = matches.single;
+    Map? asset;
+    var name = '';
+    for (final candidate in [
+      '$updateAssetPrefix-$version-${installed.abi}.apk',
+      '$updateLegacyAssetPrefix-$version-${installed.abi}.apk',
+    ]) {
+      final matches = assets
+          .whereType<Map>()
+          .where((a) => a['name'] == candidate)
+          .toList();
+      if (matches.length > 1) throw const FormatException('安装包名称重复');
+      if (matches.length == 1) {
+        asset = matches.single;
+        name = candidate;
+        break;
+      }
+    }
+    if (asset == null) throw const FormatException('未找到适合当前架构的唯一安装包');
     final bytes = asset['size'];
     final digest = asset['digest'];
     final url = Uri.tryParse(asset['browser_download_url']?.toString() ?? '');
@@ -231,7 +244,7 @@ class GithubUpdateTransport implements UpdateTransport {
           .timeout(const Duration(seconds: 15));
       request.followRedirects = false;
       request.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
-      request.headers.set(HttpHeaders.userAgentHeader, 'HongguoTV-Updater');
+      request.headers.set(HttpHeaders.userAgentHeader, 'duanjuhui-Updater');
       request.headers.set(
         HttpHeaders.acceptHeader,
         metadata ? 'application/vnd.github+json' : 'application/octet-stream',

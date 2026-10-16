@@ -18,6 +18,7 @@ match = re.search(r'^version:\s*([\w.+-]+)\s*$', (root / 'pubspec.yaml').read_te
 if not match:
     raise SystemExit('pubspec.yaml 缺少合法版本号。')
 version = match.group(1)
+release = version.split('+')[0]
 output = root / 'dist' / options.platform
 output.mkdir(parents=True, exist_ok=True)
 artifacts = []
@@ -34,28 +35,30 @@ if options.platform == 'android':
             missing = set(required) - names
             if missing:
                 raise SystemExit('APK 缺少原生库：' + ', '.join(sorted(missing)))
-        artifact_name = (f'HongguoTV-{version.split("+")[0]}-{abi}.apk' if variant.all_sources
-                         else f'{variant.slug}-{version}-{abi}.apk')
-        target = output / artifact_name
+        target = output / f'{variant.slug}-{release}-{abi}.apk'
         shutil.copy2(source, target)
         artifacts.append(target)
+        legacy = output / f'{variant.legacy_slug}-{release}-{abi}.apk'
+        shutil.copy2(target, legacy)
+        artifacts.append(legacy)
 else:
     bundle = root / 'build' / 'windows' / 'x64' / 'runner' / 'Release'
-    required = ['zhenguojian.exe', 'duanju_core.dll', 'flutter_windows.dll', 'libffmpegkit.dll',
+    executable = variant.slug + '.exe'
+    required = [executable, 'duanju_core.dll', 'flutter_windows.dll', 'libffmpegkit.dll',
                 'libmpv-2.dll', 'msvcp140.dll', 'vcruntime140.dll',
                 'data/icudtl.dat', 'data/app.so']
     missing = [name for name in required if not (bundle / name).is_file()]
     if missing:
         raise SystemExit('Windows 安装包缺少文件：' + ', '.join(missing))
-    target = output / f'{variant.slug}-{version}-windows-x64.zip'
+    target = output / f'{variant.slug}-{release}-windows-x64.zip'
     with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
         for source in sorted(bundle.rglob('*')):
             if source.is_file():
-                relative = source.relative_to(bundle).as_posix()
-                if relative == 'zhenguojian.exe':
-                    relative = variant.slug + '.exe'
-                archive.write(source, relative)
+                archive.write(source, source.relative_to(bundle).as_posix())
     artifacts.append(target)
+    installer = output / f'{variant.slug}-{release}-windows-x64.exe'
+    if installer.is_file():
+        artifacts.append(installer)
 
 checksums = []
 for artifact in sorted(artifacts):

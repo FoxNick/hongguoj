@@ -164,8 +164,6 @@ class _RemoteTargetState extends State<RemoteTarget> {
                 border: Border.all(
                   color: _focused
                       ? Theme.of(context).colorScheme.primary
-                      : widget.selected
-                      ? Theme.of(context).colorScheme.primary
                       : widget.outlined
                       ? Theme.of(context).colorScheme.outlineVariant
                       : Colors.transparent,

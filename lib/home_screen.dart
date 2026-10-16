@@ -77,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _catalogLoadScheduled = false;
   Timer? _initialRetryTimer;
   int _initialRetries = 0;
+  DateTime? _lastBackPressTime;
 
   List<SourceGroup> get _sourceGroups {
     final groups = SourceGroup.fromSources(widget.store.sources);
@@ -426,6 +427,29 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
+    }
+  }
+
+  bool _canExitNow() {
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!).inSeconds >= 2) {
+      return false;
+    }
+    return true;
+  }
+
+  void _handleHomeBack() {
+    final now = DateTime.now();
+    if (_lastBackPressTime == null ||
+        now.difference(_lastBackPressTime!).inSeconds >= 2) {
+      _lastBackPressTime = now;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('再按一次退出'),
+          duration: Duration(seconds: 2),
+        ),
+      );
     }
   }
 
@@ -1266,9 +1290,15 @@ class _HomeScreenState extends State<HomeScreen> {
         return PopScope(
           canPop:
               !_selectionMode &&
-              (!television || _tab == 0 && _search.text.isEmpty),
+              (!television || _tab == 0 && _search.text.isEmpty) &&
+              _canExitNow(),
           onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) _televisionBack();
+            if (didPop) return;
+            if (!television && _tab == 0 && _search.text.isEmpty) {
+              _handleHomeBack();
+            } else {
+              _televisionBack();
+            }
           },
           child: CallbackShortcuts(
             bindings: {

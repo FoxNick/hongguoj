@@ -124,6 +124,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _localFailure = false;
   bool _fullscreen = false;
   bool _automaticFullscreenSuppressed = false;
+  bool _orientationDecided = false;
+  bool? _userOrientation;
   bool _panelOpen = false;
   int _mobileTab = 0;
   bool _autoAdvance = true;
@@ -381,6 +383,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             _aspectRatio = size.width / size.height;
           });
           _scheduleSystemUi();
+          _decideVideoOrientation(size);
         }
       }),
     );
@@ -1610,6 +1613,25 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     final fullscreen = !_showFullscreen;
+    _userOrientation = !fullscreen;
+    await _applyFullscreen(fullscreen);
+  }
+
+  /// 首次拿到真实视频尺寸后判定一次方向：横屏视频自动转横屏全屏。
+  /// 用户手动切换过方向（[_userOrientation] 非空）后不再自动干预。
+  void _decideVideoOrientation(Size size) {
+    if (_orientationDecided || _userOrientation != null) return;
+    if (!_mobile || _television) return;
+    if (size.width <= 0 || size.height <= 0) return;
+    _orientationDecided = true;
+    if (size.height > size.width || _showFullscreen) return;
+    unawaited(_applyFullscreen(true));
+  }
+
+  Future<void> _applyFullscreen(bool fullscreen) async {
+    if (_rotating || _television) {
+      return;
+    }
     final previous = _fullscreen;
     final previousSuppressed = _automaticFullscreenSuppressed;
     _interactions.cancel();

@@ -78,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _initialRetryTimer;
   int _initialRetries = 0;
   DateTime? _lastBackPressTime;
+  Timer? _navFollowTimer;
 
   List<SourceGroup> get _sourceGroups {
     final groups = SourceGroup.fromSources(widget.store.sources);
@@ -480,6 +481,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _initialRetryTimer?.cancel();
+    _navFollowTimer?.cancel();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _cacheRefreshTimer?.cancel();
@@ -761,6 +763,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onNavSelected(int tab) {
+    _navFollowTimer?.cancel();
     if (allSourcesEnabled && tab == 2) {
       if (_recentTaps.register(tab)) {
         _openSourceGate();
@@ -770,6 +773,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _recentTaps.reset();
     }
     _changeTab(tab);
+  }
+
+  void _focusNav(int tab) {
+    if (tab == _tab) return;
+    _navFollowTimer?.cancel();
+    _navFollowTimer = Timer(const Duration(milliseconds: 200), () {
+      if (mounted) _changeTab(tab);
+    });
   }
 
   void _openSourceGate() {
@@ -1183,6 +1194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 icon: entry.$2,
                                 selected: _tab == entry.$1,
                                 autofocus: entry.$1 == 0,
+                                onFocus: () => _focusNav(entry.$1),
                                 onPressed: () => _onNavSelected(entry.$1),
                               ),
                             ),

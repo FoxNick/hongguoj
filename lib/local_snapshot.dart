@@ -36,6 +36,7 @@ class LocalSnapshot {
     'sourceGateOff',
     'sourceGateSalt',
     'sourceGateHash',
+    'sourceGateUnlocked',
     'forceLogin',
   };
   final SharedPreferences preferences;
@@ -82,6 +83,7 @@ class LocalSnapshot {
         'exportPosters',
         'sourceGateEnabled',
         'sourceGateOff',
+        'sourceGateUnlocked',
         'forceLogin',
       }.contains(entry.key.split('.').last);
       if (!owns(entry.key) ||

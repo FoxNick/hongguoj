@@ -57,7 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasMore = true;
   String? _error;
   int _generation = 0;
-  int _tab = 0;
+  static const _rankingsTab = 4;
+  int _tab = _rankingsTab;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -421,8 +422,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _televisionBack() {
     if (_selectionMode) {
       _cancelSelection();
-    } else if (_tab != 0) {
-      setState(() => _tab = 0);
+    } else if (_tab != _rankingsTab) {
+      setState(() => _tab = _rankingsTab);
     } else if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
@@ -719,6 +720,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 连点「最近观看」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
   /// 仅多源包（真果鉴）生效；红果鉴单源包无密码功能。
+  /// 导航项顺序：热榜排在首位，其余沿用既有页签编号。
+  List<int> get _navOrder => [
+    _rankingsTab,
+    0,
+    1,
+    2,
+    if (widget.store.canDownload) 3,
+  ];
+
+  int get _navPosition {
+    final position = _navOrder.indexOf(_tab);
+    return position < 0 ? 0 : position;
+  }
+
+  void _navSelected(int position) {
+    final order = _navOrder;
+    if (position >= 0 && position < order.length) {
+      _onNavSelected(order[position]);
+    }
+  }
+
   void _onNavSelected(int tab) {
     if (allSourcesEnabled && tab == 2) {
       if (_recentTaps.register(tab)) {
@@ -1128,20 +1150,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final entry in [
-                            (Icons.explore_rounded, '发现'),
-                            (Icons.bookmark_rounded, '追剧'),
-                            (Icons.history_rounded, '最近观看'),
+                            (_rankingsTab, Icons.leaderboard_rounded, '热榜'),
+                            (0, Icons.explore_rounded, '发现'),
+                            (1, Icons.bookmark_rounded, '追剧'),
+                            (2, Icons.history_rounded, '最近观看'),
                             if (widget.store.canDownload)
-                              (Icons.download_rounded, '下载'),
-                          ].indexed)
+                              (3, Icons.download_rounded, '下载'),
+                          ])
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
                               child: RemoteButton(
                                 key: ValueKey('tv-nav-${entry.$1}'),
-                                label: entry.$2.$2,
-                                icon: entry.$2.$1,
+                                label: entry.$3,
+                                icon: entry.$2,
                                 selected: _tab == entry.$1,
-                                autofocus: entry.$1 == 0,
+                                autofocus: entry.$1 == _rankingsTab,
                                 onPressed: () => _onNavSelected(entry.$1),
                               ),
                             ),
@@ -1152,11 +1175,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1),
                 ] else if (desktop) ...[
                   NavigationRail(
-                    selectedIndex: _tab,
-                    onDestinationSelected: _onNavSelected,
+                    selectedIndex: _navPosition,
+                    onDestinationSelected: _navSelected,
                     labelType: NavigationRailLabelType.all,
                     groupAlignment: -.8,
                     destinations: [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.leaderboard_outlined),
+                        selectedIcon: Icon(Icons.leaderboard_rounded),
+                        label: Text('热榜'),
+                      ),
                       NavigationRailDestination(
                         icon: Icon(Icons.explore_outlined),
                         selectedIcon: Icon(Icons.explore),
@@ -1182,7 +1210,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1, thickness: 1),
                 ],
                 Expanded(
-                  child: _tab == 0
+                  child: _tab == _rankingsTab
+                      ? RankingsScreen(
+                          repository: widget.repository,
+                          store: widget.store,
+                          initialGroup: _group.id,
+                          embedded: true,
+                        )
+                      : _tab == 0
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暂无可用站源',
@@ -1218,9 +1253,14 @@ class _HomeScreenState extends State<HomeScreen> {
               : _selectionMode
               ? _selectionBar()
               : AppBottomNavigation(
-                  selectedIndex: _tab,
-                  onDestinationSelected: _onNavSelected,
+                  selectedIndex: _navPosition,
+                  onDestinationSelected: _navSelected,
                   destinations: [
+                    NavigationDestination(
+                      icon: Icon(Icons.leaderboard_outlined),
+                      selectedIcon: Icon(Icons.leaderboard_rounded),
+                      label: '热榜',
+                    ),
                     NavigationDestination(
                       icon: Icon(Icons.explore_outlined),
                       selectedIcon: Icon(Icons.explore),
@@ -1248,7 +1288,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return PopScope(
           canPop:
               !_selectionMode &&
-              (!television || _tab == 0 && _search.text.isEmpty),
+              (!television || _tab == _rankingsTab && _search.text.isEmpty),
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },

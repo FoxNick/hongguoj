@@ -22,7 +22,9 @@
 
 **电视分类改为焦点跟随**：电视上分类行虽然已经是遥控可聚焦按钮，但只有按确定才切换（`RemoteButton` 原本没有暴露 `onFocus`），于是焦点停在某个分类上、内容却还是上一个分类，观感上像「焦点和加载不同步」。现为 [remote_widgets.dart](lib/remote_widgets.dart) 的 `RemoteButton` 增加 `onFocus` 透传，[catalog_filters.dart](lib/catalog_filters.dart) 增加 `followFocus` 选项：开启后焦点落到分类上即切换，并带 250ms 防抖（遥控连续划过只发一次请求）；显式按确定会立即切换并取消待执行项，分类变化时同样取消。手机端仍是点击切换，不受影响；[home_screen.dart](lib/home_screen.dart)、[rankings_screen.dart](lib/rankings_screen.dart) 与 [recommendations_screen.dart](lib/recommendations_screen.dart) 均已开启该选项。
 
-**未验证**：`flutter analyze lib test` 无 error / 无 warning；Go 侧由 CI 的 `verify` 编译校验。帝果是否能通过指纹通道过挑战、默认显示全部站源后的站源列表与 `--all-sources` 行为、野果停用后的站源管理与选择界面、电视遥控在弹窗内的焦点移动、以及分类焦点跟随的实际手感（250ms 防抖是否合适），均需实机确认。
+**榜单升为首页导航项**：此前榜单只能从发现页右上角的榜单图标推开独立页面。现将其提升为首页第一个导航项并改称「热榜」，应用启动默认停在该页，同时保留原图标入口与独立页面。榜单数据本就一次性拉取全部站源（`rankingBoards()` 全量后按 `initialGroup` 选中），因此嵌入不损失站源切换能力；[rankings_screen.dart](lib/rankings_screen.dart) 新增 `embedded` 选项，嵌入时不再使用自带 `AppBar`，刷新入口移到榜单说明行。[home_screen.dart](lib/home_screen.dart) 的电视左栏、桌面 NavigationRail 与手机底部导航均把「热榜」排在首位；导航顺序由 `_navOrder` 统一给出，位置与页签编号解耦，其余页签编号保持不变（发现 0、追剧 1、最近观看 2、下载 3、热榜 4），电视返回键与 `canPop` 的「首页」判定同步改为热榜。
+
+**未验证**：`flutter analyze lib test` 无 error / 无 warning；Go 侧由 CI 的 `verify` 编译校验。帝果是否能通过指纹通道过挑战、默认显示全部站源后的站源列表与 `--all-sources` 行为、野果停用后的站源管理与选择界面、电视遥控在弹窗内的焦点移动、分类焦点跟随的实际手感（250ms 防抖是否合适）、以及**默认页签改为热榜后受影响的既有测试**（`catalog_categories_test`、`television_test`、`theme_test`、`library_features_widget_test`、`downloads_test` 中假设启动即发现页的用例），均需实机或测试运行确认。
 
 ## 0.2.6 下载合集菜单新增一键合并本剧（开发快照，待验证）
 

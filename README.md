@@ -1,4 +1,4 @@
-# 红果TV · 手机 / Android TV 通用无广爽看版
+# 红果TV · 手机 / Android TV / Windows
 
 基于 [guoapp](https://github.com/zhoufuweigg/guoapp) 的非官方独立客户端。手机与 Android TV 共用一款应用，支持短剧浏览、搜索、在线播放、追剧和下载。
 
@@ -42,6 +42,20 @@
 支持 Android 8.0 及以上系统。请选择与设备和已安装应用匹配的架构；更新时直接覆盖安装，无需先卸载。
 
 源码及安装包校验文件见 [0.1.12 发布页](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/app-v0.1.12-36)。最新版本源码可从该版本标签查看；其他分支的源码版本以各自的 `pubspec.yaml` 为准。
+
+## Windows PC 测试版
+
+已发布 **0.1.13-preview.1+37 · Windows 10 / 11 x64 未签名测试版**，基于 Android 0.1.12 已发布修复源码。
+
+[下载完整 Windows ZIP](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/download/windows-v0.1.13-preview.1-37/HongguoTV-0.1.13-preview.1-windows-x64.zip) · [发布说明、源码与校验文件](https://github.com/qq294716498/HongguoTV-Phone-TV-NoAds/releases/tag/windows-v0.1.13-preview.1-37)
+
+完整解压到新目录后运行 `HongguoTV.exe`，不要只复制 EXE；所需 DLL 和资源已包含，无需安装开发工具链或 Java。
+
+沿用播放源、弹幕表情与设置、预加载/连播、全季、追剧进度、搜索发现和下载等共用功能，提供鼠标、键盘、快进和全屏操作。Windows 更新走独立测试渠道：下载并校验 ZIP 后，由用户退出应用并完整解压使用。手机亮度手势、Android 画中画和手机观看提醒不在 Windows 提供。
+
+Windows runner 的完整包、真实应用启动、合成视频首帧、未签名状态和更新 ZIP 实际下载验证已通过。真实站源播放、长时间连播、声卡输出、实际跨版本更新及不同电脑兼容性仍待实机验收；不承诺与手机全部功能完全一致。
+
+Windows 测试发布不会替换 Android Latest。Windows 源码和工作流请按对应发布标签获取；`main` 的应用源码版本可能不同。
 
 ## 应用内更新
 
@@ -89,7 +103,7 @@
 | 平台 | 状态 |
 | --- | --- |
 | Android 手机 / Android TV | 已发布 0.1.12 三架构正式安装包 |
-| Windows | 保留源码与构建支持，本次未发布新的 Windows 安装包 |
+| Windows | 已发布 0.1.13-preview.1+37 x64 未签名测试包；验证范围与限制见测试发布页 |
 | iOS | 保留工程与构建支持，尚无本次已签名安装包 |
 
 正式发布前执行自动化检查、安装包校验和更新下载验证；真实手机 / TV 的覆盖安装、实际播放与长时间连播仍待验收。

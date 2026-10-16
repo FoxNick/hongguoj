@@ -6,6 +6,7 @@ import android.app.ActivityManager
 import android.app.PictureInPictureParams
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.SystemClock
@@ -25,6 +26,7 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.provider.Settings
+import java.io.File
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -321,6 +323,12 @@ class MainActivity : FlutterActivity() {
                                 result.success(true)
                             }
                         }
+                        "downloadDirectory" -> result.success(downloadDirectory())
+                        "storagePermission" -> result.success(hasStoragePermission())
+                        "requestStoragePermission" -> {
+                            requestStoragePermission()
+                            result.success(true)
+                        }
                         "getBrightness" -> result.success(readWindowBrightness().toDouble())
                         "setBrightness" -> {
                             val value = call.argument<Double>("brightness")?.toFloat()
@@ -363,6 +371,32 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+    }
+
+    private fun downloadDirectory(): String {
+        val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        return File(base, getString(R.string.app_label_download_folder)).absolutePath
+    }
+
+    private fun hasStoragePermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+                PackageManager.PERMISSION_GRANTED
+        }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                        .setData(Uri.parse("package:$packageName")),
+                )
+            }
+        } else {
+            requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), 1001)
+        }
     }
 
     private fun pictureInPictureSupported(): Boolean {

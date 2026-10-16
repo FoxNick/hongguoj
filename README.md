@@ -16,7 +16,7 @@
 
 **托盘右键菜单**：0.3.2+44 的托盘图标能出现、窗口也能隐藏进去，但右键没有任何菜单。tray_manager 在 Windows 上不会自动弹菜单，必须在 `onTrayIconRightMouseDown` 里显式调用 `trayManager.popUpContextMenu()`，0.3.2 只调了 `setContextMenu` 登记菜单、从未弹出。现在右键弹出「显示主界面 / 退出」，左键单击仍直接恢复窗口。
 
-**未验证**：`flutter analyze lib test` 无 error / 无 warning。这是运行时错误，静态检查抓不到；能在发布前拦住的只有 Dart 测试——0.3.1 新增的 `source_gate_test` 用例（启用密码锁后重启仍解锁）会调用 `enableSourceGate`，在这版之前必然失败。当前 CI 的 `verify` 只跑 `go test` 与 `flutter analyze`，没有跑 `flutter test`。
+**未验证**：`flutter analyze lib test` 无 error / 无 warning。这是运行时错误，静态检查抓不到；能在发布前拦住的只有 Dart 测试——0.3.1 新增的 `source_gate_test` 用例（启用密码锁后重启仍解锁）会调用 `enableSourceGate`，在修复前必然失败。为此 `verify` 现在会跑 [run_dart_tests.sh](scripts/run_dart_tests.sh)（排除 15 个既存失败文件），`source_gate_test` 在纳入范围内，同类回归以后会被 CI 阻断。
 
 ## 0.3.2 电视标签焦点跟随修复与桌面托盘（待验证）
 
@@ -819,7 +819,7 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 | 平台 | 包与状态 |
 | --- | --- |
 | Android 8.0+ | 三架构（arm64-v8a / armeabi-v7a / x86_64）APK；同一签名可覆盖升级 |
-| Windows 10/11 x64 | 完整 ZIP 解压后运行 `hongguojian.exe` / `zhenguojian.exe`，保留所有 DLL 与 `data`；局域网原生发现依赖 Windows 10 1903+ |
+| Windows 10/11 x64 | 免安装 ZIP 解压后运行 `duanjuhui.exe`，或直接用安装程序装到 `Program Files\短句汇`；保留所有 DLL 与 `data`；局域网原生发现依赖 Windows 10 1903+ |
 | Android TV | 与手机共用源码，自动识别电视模式并保持横屏；待电视 / 盒子实机验收 |
 | iOS 15.1+ | 已加入工程、Go 核心链接、媒体依赖、文件管理与构建脚本；iOS 播放页禁用 media_kit_video 硬件纹理加速以规避 libmpv 渲染崩溃；待 Xcode 构建与真机验收，无已签名 IPA |
 
@@ -831,13 +831,15 @@ Flutter 多端独立短剧 / 影视应用，原名「短剧库 APP」。站源�
 
 | 触发 | 行为 |
 | --- | --- |
-| 推送到 `main`（或提交 PR 改动源码） | 只跑 `verify`：编译原生核心（`go build ./...`）、`go vet`、`flutter analyze`，以及仅报告不阻断的 `go test`。约 2–4 分钟，**不构建 APK、不发布** |
+| 推送到 `main`（或提交 PR 改动源码） | 只跑 `verify`：编译原生核心（`go build ./...`）、`go vet`、`flutter analyze`、**Dart 回归测试**，以及仅报告不阻断的 `go test`。约 3–5 分钟，**不构建 APK、不发布** |
 | 推送 `app-v*` 标签 | `verify` 通过后 **Android 与 Windows 并行构建**；**哪个平台先完成就先创建 GitHub Release**，另一个完成后再把自己的产物、校验和与说明追加进同一个 Release |
 | 手动 `workflow_dispatch` | 同上（未指定标签时按 `pubspec.yaml` 版本派生标签） |
 
 两个平台的发布任务合并为一个共用脚本 [publish_release.sh](scripts/publish_release.sh)：Release 不存在就创建（说明取本文件的对应版本小节），已存在则追加产物、合并 `SHA256SUMS.txt`（按文件名去重）并补上本平台说明。两者共用 `app-publish-<ref>` 并发组串行执行，因此不会出现两边同时创建；不需要等待另一个平台，先编译完就先发布。
 
 同名 Release 已存在时不再报错，而是直接追加。若要重发同一版本，按「发版」规则先删掉该 Release 再重新打标签。
+
+`verify` 的 Dart 测试走 [run_dart_tests.sh](scripts/run_dart_tests.sh)：脚本排除 15 个存在**既存失败**用例的文件，其余全部纳入并阻断发布；等这些文件的失败清掉后再逐个收编。加上这步是因为 `flutter analyze` 只能抓静态问题，0.3.1 那次「密码锁写盘被拒」是运行时的 `StateError`，只有 Dart 测试能拦住。
 
 推送标签前需先在 `pubspec.yaml` 提升 `version`；`verify` 会校验标签版本与 `pubspec.yaml` 一致（标签 `app-v0.2.4-36` 对应 `version: 0.2.4+36`），不一致直接失败。
 

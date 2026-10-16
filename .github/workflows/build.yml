@@ -73,8 +73,10 @@ jobs:
         run: go test ./...
       - name: 获取 Dart 依赖
         run: flutter pub get
-      - name: 分析 Dart 与测试
+      - name: 分析 Dart
         run: flutter analyze --no-fatal-infos lib test
+      - name: Dart 回归测试
+        run: bash scripts/run_dart_tests.sh
 
   android:
     needs: [verify]

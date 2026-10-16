@@ -297,7 +297,7 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       widget.drama.id,
     );
     widget.repository.catalogUpdates.addListener(_metadataChanged);
-    _file = widget.repository.cover(widget.drama);
+    _file = _requestCover(widget.repository.cover(widget.drama));
   }
 
   @override
@@ -316,7 +316,7 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       _coverRevision = widget.repository.catalogUpdates.coverRevision(
         widget.drama.id,
       );
-      _file = widget.repository.cover(widget.drama);
+      _file = _requestCover(widget.repository.cover(widget.drama));
     }
   }
 
@@ -360,12 +360,19 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       setState(() {
         _coverFailed = _retryOnFailure = false;
         _failedPath = null;
-        _file = widget.repository.cover(
-          widget.repository.catalogUpdates.current(widget.drama),
-          force: true,
+        _file = _requestCover(
+          widget.repository.cover(
+            widget.repository.catalogUpdates.current(widget.drama),
+            force: true,
+          ),
         );
       });
     }
+  }
+
+  Future<String> _requestCover(Future<String> request) {
+    request.then((_) {}, onError: (Object _) {});
+    return request;
   }
 
   Widget _failed(String? path) {

@@ -31,6 +31,20 @@ List<DownloadJob> continuousMergeJobs(List<DownloadJob> selected) {
 String _mergeDigest(Object value) =>
     sha256.convert(utf8.encode(jsonEncode(value))).toString();
 
+Future<String?> _mergeDestination(MediaLibrary library, DownloadJob job) async {
+  final plan = await library.repository.localPlayback(job.drama, job.episode);
+  if (plan == null || !plan.local) return null;
+  final directory = path.dirname(plan.url);
+  if (!await Directory(directory).exists()) return null;
+  return directory;
+}
+
+String _mergeFileName(MediaLibrary library, List<DownloadJob> jobs) {
+  final numbers = [for (final job in jobs) job.episode.number]..sort();
+  final title = library._mediaNamePart(jobs.first.drama.title);
+  return '$title ${numbers.first}-${numbers.last} 合集.mp4';
+}
+
 extension MediaMergeOperations on MediaLibrary {
   Future<LocalMediaItem> merge(List<DownloadJob> selected) async {
     final jobs = continuousMergeJobs(selected);
@@ -331,11 +345,20 @@ extension MediaMergeOperations on MediaLibrary {
     final checked = await executor.probe(output);
     verifyMediaDuration(checked, duration);
     await _decodeOutput(output, checked.duration);
-    final relative = path.join('library', id, 'full.mp4');
-    final target = File(path.join(root!, relative));
+    final folder = await _mergeDestination(this, jobs.first);
+    final relative = folder == null
+        ? path.join('library', id, 'full.mp4')
+        : path.join(folder, _mergeFileName(this, jobs));
+    final target = File(folder == null ? path.join(root!, relative) : relative);
     await target.parent.create(recursive: true);
     _check();
-    await File(output).rename(target.path);
+    if (await target.exists()) await target.delete();
+    try {
+      await File(output).rename(target.path);
+    } on FileSystemException {
+      await File(output).copy(target.path);
+      await File(output).delete();
+    }
     final item = LocalMediaItem(
       id: id,
       drama: jobs.first.drama,

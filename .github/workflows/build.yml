@@ -248,5 +248,6 @@ jobs:
           Windows（未做真机验收）：
           - *-windows-x64.zip：免安装，解压后直接运行
           - *-windows-x64.exe：安装程序，装到 Program Files 并建立快捷方式
+          - 安装前请先从托盘退出：安装程序检测到正在运行的短句汇会提示，右键托盘图标选「退出」即可
           NOTES
           bash scripts/publish_release.sh assets platform-notes.md

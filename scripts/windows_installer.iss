@@ -19,6 +19,9 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
+AppMutex=duanjuhui-app-mutex
+CloseApplications=no
+RestartApplications=no
 
 #if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")
 [Languages]

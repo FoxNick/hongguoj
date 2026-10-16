@@ -214,6 +214,7 @@ class MediaLibrary extends ChangeNotifier {
           .toList()
         ..sort((a, b) => b.created.compareTo(a.created));
   String fileFor(LocalMediaItem item) {
+    if (path.isAbsolute(item.file)) return item.file;
     if (root == null) throw AppFailure('媒体目录尚未就绪');
     final file = path.join(root!, item.file);
     if (!path.isWithin(root!, file)) throw AppFailure('媒体路径无效');
@@ -602,6 +603,7 @@ class MediaLibrary extends ChangeNotifier {
         'ALL',
         '-protocol_whitelist',
         'file,crypto,data',
+        if (plan.decryptionKey.isNotEmpty) ...['-decryption_key', plan.decryptionKey],
         '-i',
         plan.url,
         '-c',
@@ -618,6 +620,12 @@ class MediaLibrary extends ChangeNotifier {
       if (produced <= 0) {
         if (await File(staged).exists()) await File(staged).delete();
         throw AppFailure('播放列表转换未产生有效文件，已保留原分片');
+      }
+      try {
+        verifyMediaDuration(await executor.probe(staged), 0);
+      } catch (_) {
+        if (await File(staged).exists()) await File(staged).delete();
+        throw AppFailure('播放列表转换结果无法播放，已保留原分片');
       }
       await File(staged).rename(target);
     }

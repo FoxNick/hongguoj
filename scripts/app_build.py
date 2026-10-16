@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 APP_NAME = '短句汇'
 APP_SLUG = 'duanjuhui'
-LEGACY_APK_PREFIX = 'HongguoTV'
 
 
 @dataclass(frozen=True)
@@ -17,10 +16,6 @@ class BuildVariant:
     @property
     def slug(self):
         return APP_SLUG
-
-    @property
-    def legacy_slug(self):
-        return LEGACY_APK_PREFIX
 
     @property
     def arguments(self):

@@ -12,6 +12,8 @@
 
 **修复**：把 `sourceGateUnlocked` 登记进 `globalKeys` 与布尔类型集合，四个写入点恢复可用，「不使用密码」重新回到默认隐藏下的显示路径。
 
+**去掉旧名副本**：0.3.1 起每个 Release 都额外附了三份同内容的 `HongguoTV-<版本>-<架构>.apk`，原计划只保留 0.3.1 一版，但 [package_release.py](scripts/package_release.py) 一直无条件生成，0.3.2 也跟着带上了。现在删除该逻辑，Release 只保留 `duanjuhui-*` 产物；[app_updates.dart](lib/app_updates.dart) 里「优先新名、兼容旧名」的匹配保留不变。
+
 **未验证**：`flutter analyze lib test` 无 error / 无 warning。这是运行时错误，静态检查抓不到；能在发布前拦住的只有 Dart 测试——0.3.1 新增的 `source_gate_test` 用例（启用密码锁后重启仍解锁）会调用 `enableSourceGate`，在这版之前必然失败。当前 CI 的 `verify` 只跑 `go test` 与 `flutter analyze`，没有跑 `flutter test`。
 
 ## 0.3.2 电视标签焦点跟随修复与桌面托盘（待验证）
@@ -26,7 +28,7 @@
 
 ## 0.3.1 产物更名、桌面版品牌与安装程序、下载目录、敏感站源默认隐藏（待验证）
 
-**产物统一更名**：APK 由 `HongguoTV-<版本>-<架构>.apk` 改为 `duanjuhui-<版本>-<架构>.apk`，Windows 包由 `zhenguojian-0.3.0+42-windows-x64.zip` 改为 `duanjuhui-0.3.1-windows-x64.zip`，版本串不再含 `+构建号`。为保证老版本的应用内更新不中断，本版**同时附带一份内容相同的 `HongguoTV-0.3.1-<架构>.apk`**，[app_updates.dart](lib/app_updates.dart) 改为**优先新名、兼容旧名**；从 0.3.2 起不再附旧名副本。
+**产物统一更名**：APK 由 `HongguoTV-<版本>-<架构>.apk` 改为 `duanjuhui-<版本>-<架构>.apk`，Windows 包由 `zhenguojian-0.3.0+42-windows-x64.zip` 改为 `duanjuhui-0.3.1-windows-x64.zip`，版本串不再含 `+构建号`。为保证老版本的应用内更新不中断，本版**同时附带一份内容相同的 `HongguoTV-0.3.1-<架构>.apk`**，[app_updates.dart](lib/app_updates.dart) 改为**优先新名、兼容旧名**。旧名副本原计划只保留 0.3.1 一版，实现时漏改，实际一直附到 0.3.2，0.3.3 才真正去掉。
 
 **Windows 桌面版品牌对齐**：窗口标题、主程序名（`zhenguojian.exe` → `duanjuhui.exe`）、版本信息里的产品名全部改为短句汇；文件与任务栏图标由旧的红色播放按钮换成「短句汇」品牌图，重新生成 16/24/32/48/64/128/256 多尺寸图标，圆角之外是真正的透明通道，不再出现黑边。[app_branding.cmake](windows/runner/app_branding.cmake) 里按站源开关切换两套名称的分支一并删除。
 

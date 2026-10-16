@@ -26,14 +26,12 @@ class UpdaterArtifactContractTests(unittest.TestCase):
                             '--platform', 'android', '--all-sources'], check=True, capture_output=True)
             artifacts = fixture / 'dist/android'
             expected = {f'duanjuhui-0.1.6-{abi}.apk' for abi in ['arm64-v8a', 'armeabi-v7a', 'x86_64']}
-            expected |= {f'HongguoTV-0.1.6-{abi}.apk' for abi in ['arm64-v8a', 'armeabi-v7a', 'x86_64']}
             self.assertEqual({p.name for p in artifacts.glob('*.apk')}, expected)
             self.assertEqual({line.split('  ')[1] for line in (artifacts / 'SHA256SUMS.txt').read_text().splitlines()}, expected)
             subprocess.run([sys.executable, str(fixture / 'scripts/package_release.py'),
                             '--platform', 'android', '--abi', 'arm64-v8a'], check=True, capture_output=True)
             self.assertTrue((artifacts / 'duanjuhui-0.1.6-arm64-v8a.apk').is_file())
-            self.assertTrue((artifacts / 'HongguoTV-0.1.6-arm64-v8a.apk').is_file())
-            self.assertNotIn('hongguojian', (artifacts / 'SHA256SUMS.txt').read_text())
+            self.assertNotIn('HongguoTV-', (artifacts / 'SHA256SUMS.txt').read_text())
 
 
 if __name__ == '__main__':

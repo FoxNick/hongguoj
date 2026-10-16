@@ -220,7 +220,6 @@ jobs:
           - *-arm64-v8a.apk：绝大多数手机选这个
           - *-armeabi-v7a.apk：较老的 32 位手机
           - *-x86_64.apk：模拟器
-          - HongguoTV-*.apk：旧名兼容副本，供老版本应用内更新识别
           NOTES
           bash scripts/publish_release.sh assets platform-notes.md
 

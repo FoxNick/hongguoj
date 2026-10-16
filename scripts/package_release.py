@@ -38,9 +38,6 @@ if options.platform == 'android':
         target = output / f'{variant.slug}-{release}-{abi}.apk'
         shutil.copy2(source, target)
         artifacts.append(target)
-        legacy = output / f'{variant.legacy_slug}-{release}-{abi}.apk'
-        shutil.copy2(target, legacy)
-        artifacts.append(legacy)
 else:
     bundle = root / 'build' / 'windows' / 'x64' / 'runner' / 'Release'
     executable = variant.slug + '.exe'

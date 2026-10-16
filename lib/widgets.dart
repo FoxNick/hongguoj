@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,12 +9,81 @@ import 'app_layout.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
 
+OverlayEntry? _noticeOverlay;
+Timer? _noticeTimer;
+
+void _dismissNoticeOverlay() {
+  _noticeTimer?.cancel();
+  _noticeTimer = null;
+  final entry = _noticeOverlay;
+  _noticeOverlay = null;
+  if (entry == null) return;
+  try {
+    entry.remove();
+  } catch (_) {}
+}
+
+void _showTelevisionNotice(
+  BuildContext context,
+  String message, {
+  SnackBarAction? action,
+  required Duration duration,
+}) {
+  final overlay = Overlay.maybeOf(context);
+  if (overlay == null) return;
+  final entry = OverlayEntry(
+    builder: (context) => Align(
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 48),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.white, fontSize: 17),
+                ),
+                if (action != null) ...[
+                  const SizedBox(width: 18),
+                  TextButton(
+                    onPressed: () {
+                      _dismissNoticeOverlay();
+                      action.onPressed();
+                    },
+                    child: Text(action.label),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  _noticeOverlay = entry;
+  overlay.insert(entry);
+  _noticeTimer = Timer(duration, _dismissNoticeOverlay);
+}
+
 void showNotice(
   BuildContext context,
   String message, {
   SnackBarAction? action,
   Duration duration = const Duration(seconds: 3),
 }) {
+  _dismissNoticeOverlay();
+  if (AppLayout.isTelevision(context)) {
+    _showTelevisionNotice(context, message, action: action, duration: duration);
+    return;
+  }
   final messenger = ScaffoldMessenger.maybeOf(context);
   if (messenger == null) return;
   messenger.hideCurrentSnackBar();

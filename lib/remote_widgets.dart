@@ -74,6 +74,7 @@ class RemoteTarget extends StatefulWidget {
     this.onFocus,
     this.autofocus = false,
     this.selected = false,
+    this.selectedBackground = true,
     this.label,
     this.radius = 14,
     this.padding = const EdgeInsets.all(4),
@@ -86,6 +87,7 @@ class RemoteTarget extends StatefulWidget {
   final VoidCallback? onFocus;
   final bool autofocus;
   final bool selected;
+  final bool selectedBackground;
   final String? label;
   final double radius;
   final EdgeInsetsGeometry padding;
@@ -153,7 +155,7 @@ class _RemoteTargetState extends State<RemoteTarget> {
               duration: const Duration(milliseconds: 120),
               padding: widget.padding,
               decoration: BoxDecoration(
-                color: widget.selected
+                color: widget.selected && widget.selectedBackground
                     ? Theme.of(context).colorScheme.primaryContainer
                     : _focused && widget.outlined
                     ? Theme.of(context).colorScheme.surfaceContainerHighest
@@ -186,6 +188,7 @@ class RemoteButton extends StatelessWidget {
     required this.onPressed,
     this.icon,
     this.selected = false,
+    this.selectedBackground = true,
     this.autofocus = false,
     this.focusNode,
     this.onFocus,
@@ -194,6 +197,7 @@ class RemoteButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool selected;
+  final bool selectedBackground;
   final bool autofocus;
   final FocusNode? focusNode;
   final VoidCallback? onFocus;
@@ -202,6 +206,7 @@ class RemoteButton extends StatelessWidget {
   Widget build(BuildContext context) => RemoteTarget(
     onPressed: onPressed,
     selected: selected,
+    selectedBackground: selectedBackground,
     autofocus: autofocus,
     focusNode: focusNode,
     onFocus: onFocus,
@@ -211,13 +216,26 @@ class RemoteButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[Icon(icon, size: 22), const SizedBox(width: 8)],
+          if (icon != null) ...[
+            Icon(
+              icon,
+              size: 22,
+              color: selected
+                  ? Theme.of(context).colorScheme.primary
+                  : onPressed == null
+                  ? Theme.of(context).disabledColor
+                  : null,
+            ),
+            const SizedBox(width: 8),
+          ],
           Text(
             label,
             style: TextStyle(
               fontSize: 17,
               color: onPressed == null
                   ? Theme.of(context).disabledColor
+                  : selected
+                  ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onSurface,
             ),
           ),

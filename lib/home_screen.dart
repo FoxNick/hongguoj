@@ -1230,6 +1230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   label: entry.$3,
                                   icon: entry.$2,
                                   selected: _tab == entry.$1,
+                                  selectedBackground: false,
                                   autofocus: entry.$1 == 0,
                                   onFocus: () => _focusNav(entry.$1),
                                   onPressed: () => _onNavSelected(entry.$1),

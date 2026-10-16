@@ -122,6 +122,7 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                                 key: ValueKey('category-${entry.id}'),
                                 label: entry.name,
                                 selected: entry.id == widget.category,
+                                selectedBackground: false,
                                 onFocus: () => _focusCategory(entry.id),
                                 onPressed: () => _selectCategory(entry.id),
                               )

@@ -726,13 +726,9 @@ class _HomeScreenState extends State<HomeScreen> {
     2,
     1,
     if (widget.store.canDownload) 3,
-    0,
   ];
 
-  int get _navPosition {
-    final position = _navOrder.indexOf(_tab);
-    return position < 0 ? 0 : position;
-  }
+  int get _navPosition => _navOrder.indexOf(_tab);
 
   void _navSelected(int position) {
     final order = _navOrder;
@@ -1032,6 +1028,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _refreshCatalog,
                   ),
+                if (_tab != 0)
+                  IconButton(
+                    key: const ValueKey('open-catalog'),
+                    tooltip: '发现',
+                    onPressed: widget.store.sources.isEmpty
+                        ? null
+                        : () => _changeTab(0),
+                    icon: const Icon(Icons.explore_outlined),
+                  ),
                 const AppUpdateIndicator(),
                 PopupMenuButton<String>(
                   tooltip: '更多',
@@ -1155,7 +1160,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             (1, Icons.bookmark_rounded, '追剧'),
                             if (widget.store.canDownload)
                               (3, Icons.download_rounded, '下载'),
-                            (0, Icons.explore_rounded, '发现'),
                           ])
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
@@ -1175,7 +1179,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1),
                 ] else if (desktop) ...[
                   NavigationRail(
-                    selectedIndex: _navPosition,
+                    selectedIndex: _navPosition < 0 ? null : _navPosition,
                     onDestinationSelected: _navSelected,
                     labelType: NavigationRailLabelType.all,
                     groupAlignment: -.8,
@@ -1200,11 +1204,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           selectedIcon: Icon(Icons.download_rounded),
                           label: Text('下载'),
                         ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.explore_outlined),
-                        selectedIcon: Icon(Icons.explore),
-                        label: Text('发现'),
-                      ),
                     ],
                   ),
                   const VerticalDivider(width: 1, thickness: 1),
@@ -1276,11 +1275,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         selectedIcon: Icon(Icons.download_rounded),
                         label: '下载',
                       ),
-                    NavigationDestination(
-                      icon: Icon(Icons.explore_outlined),
-                      selectedIcon: Icon(Icons.explore),
-                      label: '发现',
-                    ),
                   ],
                 ),
         );

@@ -478,6 +478,7 @@ class _RemoteGridState extends State<RemoteGrid> {
     onKeyEvent: _key,
     child: CustomScrollView(
       controller: _scroll,
+      cacheExtent: widget.itemExtent * 3,
       slivers: [
         SliverPadding(
           padding: widget.padding,

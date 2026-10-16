@@ -102,6 +102,7 @@ func newNativeDownloads(engine *nativeEngine) *nativeDownloads {
 			DramaID: job.Drama.ID, DramaTitle: job.Drama.Title, Chapter: job.Chapter, Index: job.Index})
 	}
 	manager.loadErr = manager.load()
+	nativeEnsureHiddenFromGallery(manager.root)
 	return manager
 }
 

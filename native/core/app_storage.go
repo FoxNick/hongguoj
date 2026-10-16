@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -43,6 +44,17 @@ func (engine *nativeEngine) storage() (nativeStorageInfo, error) {
 	}
 	info.Free = nativeFreeSpace(root)
 	return info, nil
+}
+
+func nativeEnsureHiddenFromGallery(root string) {
+	if runtime.GOOS != "android" || root == "" {
+		return
+	}
+	marker := filepath.Join(root, ".nomedia")
+	if _, err := os.Stat(marker); err == nil {
+		return
+	}
+	_ = nativeDownloadWrite(marker, nil)
 }
 
 func nativeDownloadLocation(directory string) string {
@@ -132,11 +144,13 @@ func (engine *nativeEngine) setDownloadDirectory(directory string) (string, erro
 	}
 	target := filepath.Clean(directory)
 	if target == manager.root {
+		nativeEnsureHiddenFromGallery(target)
 		return target, nil
 	}
 	if err := os.MkdirAll(target, 0700); err != nil {
 		return "", errors.New("无法创建下载目录，请检查存储权限")
 	}
+	nativeEnsureHiddenFromGallery(target)
 	data, _ := json.Marshal(map[string]string{"directory": target})
 	if err := nativeDownloadWrite(filepath.Join(engine.directory, "download-location.json"), data); err != nil {
 		return "", errors.New("保存下载目录失败")
@@ -222,6 +236,7 @@ func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) er
 		return errors.New("保存下载目录失败，原文件已保留")
 	}
 	manager.root = target
+	nativeEnsureHiddenFromGallery(target)
 	_ = os.RemoveAll(source)
 	return nil
 }

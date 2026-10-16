@@ -92,7 +92,10 @@ void main() {
             );
             await tester.tap(find.text('打开合成视频'));
             await settle(tester);
-            platform.videoSize(1920, 1080);
+            platform.videoSize(
+              fullscreen ? 1920 : 1080,
+              fullscreen ? 1080 : 1920,
+            );
             await settle(tester);
             expect(
               tester

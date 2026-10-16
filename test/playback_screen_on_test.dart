@@ -90,7 +90,10 @@ void main() {
               : MaterialApp(home: screen),
         );
         await frames();
-        platform.videoSize(1920, 1080);
+        platform.videoSize(
+          mode == 'portrait' ? 1080 : 1920,
+          mode == 'portrait' ? 1920 : 1080,
+        );
         await frames();
         if (mode == 'retry') {
           await tester.pump(const Duration(seconds: 1));

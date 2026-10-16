@@ -1,5 +1,6 @@
 import 'app_update_screen.dart';
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +36,7 @@ import 'batch_downloads.dart';
 import 'drama_actions.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
+import 'tray_support.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -451,6 +453,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  static const _backChannel = MethodChannel('duanju/home-back');
+
+  Future<void> _onNativeBack(MethodCall call) async {
+    if (call.method != 'homeBackPressed' || !mounted) return;
+    await Navigator.of(context).maybePop();
+  }
+
+  void _quitApplication() {
+    if (Platform.isWindows) {
+      unawaited(exitApplication());
+      return;
+    }
+    unawaited(SystemNavigator.pop());
+  }
+
   void _handleSystemBack() {
     if (_selectionMode) {
       _cancelSelection();
@@ -466,6 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _scroll.addListener(_onCatalogScroll);
     _navFocus.addListener(_navFocusChanged);
+    _backChannel.setMethodCallHandler(_onNativeBack);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
     _sourceSignature = widget.store.sources.map((site) => site.id).join(',');
@@ -505,6 +523,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _scroll.dispose();
     _navFocus.removeListener(_navFocusChanged);
     _navFocus.dispose();
+    _backChannel.setMethodCallHandler(null);
     super.dispose();
   }
 
@@ -1113,6 +1132,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     } else if (value == 'display') {
                       _chooseDisplayMode();
+                    } else if (value == 'quit') {
+                      _quitApplication();
                     } else if (value == 'about') {
                       showAboutDialog(
                         context: context,
@@ -1185,6 +1206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       value: 'about',
                       child: Text('关于$appName'),
                     ),
+                    const PopupMenuItem(value: 'quit', child: Text('退出$appName')),
                   ],
                 ),
               ],

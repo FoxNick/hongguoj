@@ -600,6 +600,14 @@ func discardDownloadMedia(directory, name string) {
 	discardDownloadMediaDepth(directory, name, 0)
 }
 
+func removeDownloadReference(directory, reference string) {
+	if reference == "" || strings.HasPrefix(reference, "data:") ||
+		strings.Contains(reference, "..") {
+		return
+	}
+	_ = os.Remove(filepath.Join(directory, filepath.FromSlash(reference)))
+}
+
 func discardDownloadMediaDepth(directory, name string, depth int) {
 	if name == "" || depth > 4 || !nativeDownloadFileNameValid(name) {
 		return
@@ -608,7 +616,13 @@ func discardDownloadMediaDepth(directory, name string, depth int) {
 		if data, err := os.ReadFile(filepath.Join(directory, name)); err == nil {
 			for _, line := range strings.Split(string(data), "\n") {
 				entry := strings.TrimSpace(line)
-				if entry == "" || strings.HasPrefix(entry, "#") {
+				if entry == "" {
+					continue
+				}
+				if strings.HasPrefix(entry, "#") {
+					for _, match := range nativePlaylistURI.FindAllStringSubmatch(entry, -1) {
+						removeDownloadReference(directory, match[1])
+					}
 					continue
 				}
 				discardDownloadMediaDepth(directory, entry, depth+1)

@@ -23,14 +23,18 @@ func (manager *nativeDownloads) localFilesValid(record nativeDownloadRecord) boo
 	seen := map[string]bool{}
 	var validate func(string, int) bool
 	validate = func(name string, depth int) bool {
-		if depth > 8 || len(seen) > 20100 || filepath.Base(name) != name || strings.ContainsAny(name, "/\\:") {
+		if depth > 8 || len(seen) > 20100 {
+			return false
+		}
+		base := strings.TrimPrefix(name, nativeDownloadMetaDir+"/")
+		if filepath.Base(base) != base || strings.ContainsAny(base, "/\\:") {
 			return false
 		}
 		if seen[name] {
 			return true
 		}
 		seen[name] = true
-		file := filepath.Join(directory, name)
+		file := filepath.Join(directory, filepath.FromSlash(name))
 		info, err := os.Stat(file)
 		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
 			return false

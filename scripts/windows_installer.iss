@@ -20,7 +20,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 AppMutex=duanjuhui-app-mutex
-CloseApplications=no
+CloseApplications=force
 RestartApplications=no
 
 #if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")

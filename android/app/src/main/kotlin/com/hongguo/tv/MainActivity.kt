@@ -35,6 +35,7 @@ class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
+    private var backChannel: MethodChannel? = null
     private var televisionMode = false
     private var televisionPlaybackActive = false
     private var activityResumed = false
@@ -89,23 +90,20 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun forwardTelevisionBack(): Boolean {
-        if (!televisionPlaybackActive || deviceChannel == null ||
-            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode)) {
-            return false
-        }
-        deviceChannel?.invokeMethod("televisionBackPressed", null)
-        return true
-    }
-
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (televisionPlaybackActive && deviceChannel != null &&
-            (event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_ESCAPE) &&
-            (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || !isInPictureInPictureMode)) {
-            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) forwardTelevisionBack()
-            return true
+        if (!televisionMode || backChannel == null ||
+            (event.keyCode != KeyEvent.KEYCODE_BACK && event.keyCode != KeyEvent.KEYCODE_ESCAPE) ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode)) {
+            return super.dispatchKeyEvent(event)
         }
-        return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+            if (televisionPlaybackActive && deviceChannel != null) {
+                deviceChannel?.invokeMethod("televisionBackPressed", null)
+            } else {
+                backChannel?.invokeMethod("homeBackPressed", null)
+            }
+        }
+        return true
     }
 
     @Suppress("DEPRECATION")
@@ -224,6 +222,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         appUpdateBridge = AppUpdateBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        backChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/home-back")
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/device")
             .also { channel ->
                 channel.setMethodCallHandler { call, result ->
@@ -463,6 +462,7 @@ class MainActivity : FlutterActivity() {
         applyPlaybackScreenOn()
         setFullscreenBrightness(false)
         televisionPlaybackActive = false
+        backChannel = null
         deviceChannel?.setMethodCallHandler(null)
         deviceChannel = null
         super.cleanUpFlutterEngine(flutterEngine)

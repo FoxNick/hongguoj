@@ -20,7 +20,7 @@
 
 **电视焦点修复**：在电视上用遥控连点 6 次「最近观看」打开站源密码锁弹窗后，焦点停在第一个密码输入框内无法下移。原因是单行 `TextField` 会消费上下方向键（映射为文本选区意图），键盘事件走不到焦点遍历。现于 [source_gate_dialog.dart](lib/source_gate_dialog.dart) 的弹窗外层包一个 `Focus` 拦截上下键并改为 `focusInDirection`，因此可以从输入框走到「解锁」等按钮；左右键仍留给输入框移动光标。
 
-**电视分类改为焦点跟随**：电视上分类行虽然已经是遥控可聚焦按钮，但只有按确定才切换（`RemoteButton` 原本没有暴露 `onFocus`），于是焦点停在某个分类上、内容却还是上一个分类，观感上像「焦点和加载不同步」。现为 [remote_widgets.dart](lib/remote_widgets.dart) 的 `RemoteButton` 增加 `onFocus` 透传，[catalog_filters.dart](lib/catalog_filters.dart) 增加 `followFocus` 选项：开启后焦点落到分类上即切换，并带 250ms 防抖（遥控连续划过只发一次请求）；显式按确定会立即切换并取消待执行项，分类变化时同样取消。手机端仍是点击切换，不受影响；[home_screen.dart](lib/home_screen.dart) 已开启该选项。
+**电视分类改为焦点跟随**：电视上分类行虽然已经是遥控可聚焦按钮，但只有按确定才切换（`RemoteButton` 原本没有暴露 `onFocus`），于是焦点停在某个分类上、内容却还是上一个分类，观感上像「焦点和加载不同步」。现为 [remote_widgets.dart](lib/remote_widgets.dart) 的 `RemoteButton` 增加 `onFocus` 透传，[catalog_filters.dart](lib/catalog_filters.dart) 增加 `followFocus` 选项：开启后焦点落到分类上即切换，并带 250ms 防抖（遥控连续划过只发一次请求）；显式按确定会立即切换并取消待执行项，分类变化时同样取消。手机端仍是点击切换，不受影响；[home_screen.dart](lib/home_screen.dart)、[rankings_screen.dart](lib/rankings_screen.dart) 与 [recommendations_screen.dart](lib/recommendations_screen.dart) 均已开启该选项。
 
 **未验证**：`flutter analyze lib test` 无 error / 无 warning；Go 侧由 CI 的 `verify` 编译校验。帝果是否能通过指纹通道过挑战、默认显示全部站源后的站源列表与 `--all-sources` 行为、野果停用后的站源管理与选择界面、电视遥控在弹窗内的焦点移动、以及分类焦点跟随的实际手感（250ms 防抖是否合适），均需实机确认。
 

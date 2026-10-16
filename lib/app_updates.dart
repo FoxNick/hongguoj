@@ -319,7 +319,9 @@ class GithubUpdateTransport implements UpdateTransport {
         if (identical(_active, client)) _active = null;
       }
     }
-    throw lastError ?? const FormatException('更新地址不可用');
+    throw lastError is FormatException || lastError is HttpException
+        ? lastError!
+        : FormatException('更新地址不可用${lastError == null ? '' : '：$lastError'}');
   }
 
   @override
@@ -374,7 +376,9 @@ class GithubUpdateTransport implements UpdateTransport {
         if (identical(_active, client)) _active = null;
       }
     }
-    throw lastError ?? const FormatException('下载地址不可用');
+    throw lastError is FormatException || lastError is HttpException
+        ? lastError!
+        : FormatException('下载地址不可用${lastError == null ? '' : '：$lastError'}');
   }
 
   @override

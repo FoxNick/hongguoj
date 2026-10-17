@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _refreshingUpdatedCache = false;
   bool _selectionMode = false;
   bool _showRecommendations = false;
-  final _recentTaps = RepeatTapGate();
+  final _recentTaps = RepeatTapGate(threshold: 8);
   String _sourceSignature = '';
   bool _catalogLoadScheduled = false;
   Timer? _initialRetryTimer;
@@ -772,7 +772,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedDramas.clear();
   });
 
-  /// 连点「历史」6 次弹出站源密码锁（用于启用 / 关闭密码功能）。
+  /// 连按「历史」8 次直接解锁默认隐藏的站源，不出弹窗。
   /// 仅全站源版生效；精简版无密码功能。
   /// 导航项顺序与页签编号解耦：历史（编号 2）排在追剧（编号 1）之前。
   List<int> get _navOrder => [
@@ -795,7 +795,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _navFollowTimer?.cancel();
     if (allSourcesEnabled && tab == 2) {
       if (_recentTaps.register(tab)) {
-        _openSourceGate();
+        _unlockSourcesSilently();
         return;
       }
     } else {
@@ -821,9 +821,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _openSourceGate() {
+  void _unlockSourcesSilently() {
     _pauseCatalog();
-    unawaited(showSourceGateDialog(context, widget.store));
+    unawaited(saveUserChange(context, widget.store.unlockSourcesDirectly));
   }
 
   void _cancelSelection() => setState(() {

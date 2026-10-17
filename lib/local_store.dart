@@ -207,6 +207,15 @@ class LocalStore extends ChangeNotifier {
     }
   });
 
+  /// 直接解锁默认隐藏的站源（不校验密码），解锁状态会保存。
+  Future<void> unlockSourcesDirectly() => _queue(() async {
+    if (_configurationError != null) throw StateError('本地用户配置损坏，请先恢复');
+    if (_sourcesUnlocked) return;
+    _sourcesUnlocked = true;
+    await _commit({'sourceGateUnlocked': true});
+    _notify();
+  });
+
   /// 重新隐藏默认隐藏的站源。
   Future<void> lockSources() => _queue(() async {
     if (!_gateEnabled || !_sourcesUnlocked) return;

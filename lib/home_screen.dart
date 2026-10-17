@@ -28,7 +28,6 @@ import 'vip_icon.dart';
 import 'settings_screen.dart';
 import 'profiles_screen.dart';
 import 'search_input.dart';
-import 'source_gate_dialog.dart';
 import 'source_gate_taps.dart';
 import 'sources_screen.dart';
 import 'batch_download_screen.dart';

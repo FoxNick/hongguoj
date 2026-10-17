@@ -26,8 +26,8 @@ artifacts = []
 
 if options.platform == 'android':
     for abi in options.abi or ['arm64-v8a', 'armeabi-v7a', 'x86_64']:
-        prefix = '' if options.flavor == 'none' else options.flavor + '-'
-        source = root / 'build' / 'app' / 'outputs' / 'flutter-apk' / f'app-{prefix}release.apk'
+        segment = '' if options.flavor == 'none' else options.flavor + '-'
+        source = root / 'build' / 'app' / 'outputs' / 'flutter-apk' / f'app-{segment}{abi}-release.apk'
         if not source.is_file():
             raise SystemExit('缺少 APK：' + str(source))
         with zipfile.ZipFile(source) as archive:
@@ -41,6 +41,9 @@ if options.platform == 'android':
         target = output / f'{variant.slug}-{segment}{release}-{abi}.apk'
         shutil.copy2(source, target)
         artifacts.append(target)
+        legacy = output / f'{variant.slug}-{release}-{abi}.apk'
+        shutil.copy2(target, legacy)
+        artifacts.append(legacy)
 else:
     bundle = root / 'build' / 'windows' / 'x64' / 'runner' / 'Release'
     executable = variant.slug + '.exe'

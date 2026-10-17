@@ -36,7 +36,7 @@ with china_mirror_environment(environment, options.cn_mirrors) as env, mirrored_
     for flavor in DEFAULT_FLAVORS:
         abi = FLAVOR_ABI[flavor]
         built = BuildVariant(variant.all_sources, flavor)
-        subprocess.run([flutter, 'build', 'apk', '--release', '--flavor', flavor,
+        subprocess.run([flutter, 'build', 'apk', '--release', '--split-per-abi', '--flavor', flavor,
                         '--target-platform', ABI_TARGET[abi], '--no-pub', *built.flutter_arguments],
                        cwd=root, env=env, check=True)
         subprocess.run([sys.executable, str(root / 'scripts' / 'package_release.py'),

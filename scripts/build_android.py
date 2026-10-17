@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from build_mirrors import china_mirror_environment, mirrored_pub_lockfile
-from app_build import BuildVariant, add_variant_argument
+from app_build import ABI_TARGET, DEFAULT_FLAVORS, FLAVOR_ABI, BuildVariant, add_variant_argument
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -29,13 +29,16 @@ abi_args = [item for abi in options.abi or [] for item in ['--abi', abi]]
 with china_mirror_environment(environment, options.cn_mirrors) as env, mirrored_pub_lockfile(root, env):
     if options.cn_mirrors:
         print('本次构建启用国内依赖镜像，保留官方 Maven 仓库备用。', flush=True)
-    subprocess.run([sys.executable, str(root / 'scripts' / 'build_native.py'), '--platform', 'android', *abi_args, *variant.arguments],
+    native_args = [item for flavor in DEFAULT_FLAVORS for item in ['--abi', FLAVOR_ABI[flavor]]]
+    subprocess.run([sys.executable, str(root / 'scripts' / 'build_native.py'), '--platform', 'android', *native_args, *variant.arguments],
                    cwd=root, env=env, check=True)
     subprocess.run([flutter, 'pub', 'get'], cwd=root, env=env, check=True)
-    build_args = [flutter, 'build', 'apk', '--release', '--split-per-abi', '--no-pub', *variant.flutter_arguments]
-    if options.abi:
-        targets = {'arm64-v8a': 'android-arm64', 'armeabi-v7a': 'android-arm', 'x86_64': 'android-x64'}
-        build_args += ['--target-platform', ','.join(targets[abi] for abi in options.abi)]
-    subprocess.run(build_args, cwd=root, env=env, check=True)
-    subprocess.run([sys.executable, str(root / 'scripts' / 'package_release.py'), '--platform', 'android', *abi_args, *variant.arguments],
-                   cwd=root, env=env, check=True)
+    for flavor in DEFAULT_FLAVORS:
+        abi = FLAVOR_ABI[flavor]
+        built = BuildVariant(variant.all_sources, flavor)
+        subprocess.run([flutter, 'build', 'apk', '--release', '--flavor', flavor,
+                        '--target-platform', ABI_TARGET[abi], '--no-pub', *built.flutter_arguments],
+                       cwd=root, env=env, check=True)
+        subprocess.run([sys.executable, str(root / 'scripts' / 'package_release.py'),
+                        '--platform', 'android', '--abi', abi, '--flavor', flavor, *variant.arguments],
+                       cwd=root, env=env, check=True)

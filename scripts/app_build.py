@@ -3,11 +3,15 @@ from dataclasses import dataclass
 
 APP_NAME = '橙龙短剧'
 APP_SLUG = 'cldj'
+FLAVOR_ABI = {'tv': 'armeabi-v7a', 'phone': 'arm64-v8a'}
+ABI_TARGET = {'arm64-v8a': 'android-arm64', 'armeabi-v7a': 'android-arm'}
+DEFAULT_FLAVORS = ('tv', 'phone')
 
 
 @dataclass(frozen=True)
 class BuildVariant:
     all_sources: bool = False
+    flavor: str = 'tv'
 
     @property
     def name(self):
@@ -23,7 +27,8 @@ class BuildVariant:
 
     @property
     def flutter_arguments(self):
-        return ['--dart-define=ALL_SOURCES=' + str(self.all_sources).lower()]
+        return ['--dart-define=ALL_SOURCES=' + str(self.all_sources).lower(),
+                '--dart-define=FLAVOR=' + self.flavor]
 
     @property
     def linker_flags(self):
@@ -38,7 +43,7 @@ class BuildVariant:
             key, separator, value = base64.b64decode(item, validate=True).decode('utf-8').partition('=')
             if separator:
                 values[key] = value
-        return cls(values.get('ALL_SOURCES') == 'true')
+        return cls(values.get('ALL_SOURCES') == 'true', values.get('FLAVOR') or 'tv')
 
 
 def add_variant_argument(parser):

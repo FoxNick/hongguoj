@@ -11,6 +11,7 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--platform', choices=['android', 'windows'], required=True)
 parser.add_argument('--abi', action='append', choices=['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+parser.add_argument('--flavor', choices=['tv', 'phone', 'none'], default='none')
 add_variant_argument(parser)
 options = parser.parse_args()
 variant = BuildVariant(options.all_sources)
@@ -25,7 +26,8 @@ artifacts = []
 
 if options.platform == 'android':
     for abi in options.abi or ['arm64-v8a', 'armeabi-v7a', 'x86_64']:
-        source = root / 'build' / 'app' / 'outputs' / 'flutter-apk' / f'app-{abi}-release.apk'
+        prefix = '' if options.flavor == 'none' else options.flavor + '-'
+        source = root / 'build' / 'app' / 'outputs' / 'flutter-apk' / f'app-{prefix}release.apk'
         if not source.is_file():
             raise SystemExit('缺少 APK：' + str(source))
         with zipfile.ZipFile(source) as archive:
@@ -35,7 +37,8 @@ if options.platform == 'android':
             missing = set(required) - names
             if missing:
                 raise SystemExit('APK 缺少原生库：' + ', '.join(sorted(missing)))
-        target = output / f'{variant.slug}-{release}-{abi}.apk'
+        segment = '' if options.flavor == 'none' else options.flavor + '-'
+        target = output / f'{variant.slug}-{segment}{release}-{abi}.apk'
         shutil.copy2(source, target)
         artifacts.append(target)
 else:

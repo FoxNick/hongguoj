@@ -13,7 +13,8 @@ const updateApi =
     'https://api.github.com/repos/$updateRepository/releases/latest';
 const updatePage = 'https://github.com/$updateRepository/releases/latest';
 const updateMaximumBytes = 256 * 1024 * 1024;
-const updateAssetPrefix = 'cldj';
+const updateAssetPrefix =
+    'cldj-${String.fromEnvironment('FLAVOR', defaultValue: 'tv')}';
 const updateLegacyAssetPrefix = 'HongguoTV';
 
 /// `flutter build apk --split-per-abi` 会按 ABI 叠加 versionCode，

@@ -43,6 +43,19 @@ android {
         manifestPlaceholders["appBanner"] = "@drawable/tv_banner_hongguo"
     }
 
+    flavorDimensions += "form"
+
+    productFlavors {
+        create("tv") {
+            dimension = "form"
+            manifestPlaceholders["orientation"] = "landscape"
+        }
+        create("phone") {
+            dimension = "form"
+            manifestPlaceholders["orientation"] = "unspecified"
+        }
+    }
+
     signingConfigs {
         if (releaseKey.exists()) {
             create("release") {
